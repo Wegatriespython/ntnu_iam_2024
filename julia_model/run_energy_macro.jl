@@ -53,25 +53,37 @@ function create_integrated_model()
     println("✓ Created macro model equations")
     
     # Add energy model cost equations that depend on shared variables
-    # EQ_COST_ANNUAL - costs per year
+    # Pre-compute indices and lifetime ranges for performance
+    year_indices = Dict(y => i for (i, y) in enumerate(year_all))
+    tech_lifetimes = Dict(tech => get(lifetime, tech, 0) for tech in technology if haskey(lifetime, tech))
+    
+    # Pre-compute lifetime ranges for each technology and year combination
+    lifetime_ranges = Dict{Tuple{String, Int}, Vector{Int}}()
+    for tech in keys(tech_lifetimes), y in year_all
+        y_idx = year_indices[y]
+        lt = tech_lifetimes[tech]
+        valid_years = [y2 for y2 in year_all 
+                       if year_indices[y2] <= y_idx && 
+                          (y_idx - year_indices[y2] + 1) * period_length <= lt]
+        lifetime_ranges[(tech, y)] = valid_years
+    end
+    
+    # Pre-compute discount factors
+    discount_factors = Dict(y => (1 - discount_rate)^(period_length * (year_indices[y] - 1)) for y in year_all)
+    
+    # EQ_COST_ANNUAL - costs per year (optimized)
     for y in year_all
         @constraint(model,
             sum(model[:ACT][tech, y] * get(vom, (tech, y), 0) for tech in technology) +
-            sum(
-                sum(model[:CAP_NEW][tech, y2] * get(cost_capacity, (tech, y2), 0)
-                    for y2 in year_all 
-                    if findfirst(==(y2), year_all) <= findfirst(==(y), year_all) &&
-                       (findfirst(==(y), year_all) - findfirst(==(y2), year_all) + 1) * period_length <= get(lifetime, tech, 0))
-                for tech in technology
-                if haskey(lifetime, tech) && lifetime[tech] > 0
-            ) == COST_ANNUAL[y]
+            sum(sum(model[:CAP_NEW][tech, y2] * get(cost_capacity, (tech, y2), 0)
+                    for y2 in lifetime_ranges[(tech, y)])
+                for tech in keys(tech_lifetimes)) == COST_ANNUAL[y]
         )
     end
     
-    # EQ_COST - total discounted system costs
+    # EQ_COST - total discounted system costs (optimized)
     @constraint(model,
-        sum(COST_ANNUAL[y] * period_length * (1 - discount_rate)^(period_length * (findfirst(==(y), year_all) - 1))
-            for y in year_all) == model[:TOTAL_COST]
+        sum(COST_ANNUAL[y] * period_length * discount_factors[y] for y in year_all) == model[:TOTAL_COST]
     )
     
     println("✓ Added energy cost equations")
@@ -196,33 +208,46 @@ function solve_energy_macro_model()
     return model, status
 end
 
-# Function to save results (equivalent to GDX export)
+# Function to save results (equivalent to GDX export) - optimized
 function save_results(model)
     println("\nSaving results...")
     
-    # Create results dictionary
-    results = Dict()
+    # Pre-allocate typed dictionaries for better performance
+    results = Dict{String, Dict}(
+        "ACT" => Dict{Tuple{String,Int}, Float64}(),
+        "CAP_NEW" => Dict{Tuple{String,Int}, Float64}(),
+        "EMISS" => Dict{Int, Float64}(),
+        "Y" => Dict{Int, Float64}(),
+        "C" => Dict{Int, Float64}(),
+        "I" => Dict{Int, Float64}(),
+        "K" => Dict{Int, Float64}(),
+        "PHYSENE" => Dict{Tuple{String,Int}, Float64}()
+    )
     
-    # Energy results
-    results["ACT"] = Dict()
-    results["CAP_NEW"] = Dict()
-    results["EMISS"] = Dict()
+    # Batch variable extraction for better performance
+    act_vals = value.(model[:ACT])
+    cap_new_vals = value.(model[:CAP_NEW])
     
+    # Efficiently populate results
     for tech in technology, y in year_all
-        results["ACT"][(tech, y)] = value(model[:ACT][tech, y])
-        results["CAP_NEW"][(tech, y)] = value(model[:CAP_NEW][tech, y])
+        results["ACT"][(tech, y)] = act_vals[tech, y]
+        results["CAP_NEW"][(tech, y)] = cap_new_vals[tech, y]
     end
     
+    # Extract other variables
     for y in year_all
         results["EMISS"][y] = value(model[:EMISS][y])
+        results["Y"][y] = value(model[:Y][y])
+        results["C"][y] = value(model[:C][y])
+        results["I"][y] = value(model[:I][y])
+        results["K"][y] = value(model[:K][y])
     end
     
-    # Macro results
-    results["Y"] = Dict(y => value(model[:Y][y]) for y in year_all)
-    results["C"] = Dict(y => value(model[:C][y]) for y in year_all)
-    results["I"] = Dict(y => value(model[:I][y]) for y in year_all)
-    results["K"] = Dict(y => value(model[:K][y]) for y in year_all)
-    results["PHYSENE"] = Dict((s, y) => value(model[:PHYSENE][s, y]) for s in sector, y in year_all)
+    # Extract PHYSENE values
+    physene_vals = value.(model[:PHYSENE])
+    for s in sector, y in year_all
+        results["PHYSENE"][(s, y)] = physene_vals[s, y]
+    end
     
     # Save to file (in Julia, we can save as JLD2 or serialize)
     # For now, just print confirmation

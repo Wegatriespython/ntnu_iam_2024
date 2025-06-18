@@ -307,29 +307,41 @@ hours = Dict(
     "electricity_grid" => 8760, "appliances" => 8760
 )
 
-# Calculate cost parameters
+# Calculate cost parameters with type stability optimizations
 function calculate_costs()
-    cost_capacity = Dict()
-    cost_activity = Dict()
-    cost = Dict()
+    # Type-stable dictionaries
+    cost_capacity = Dict{Tuple{String,Int}, Float64}()
+    cost_activity = Dict{Tuple{String,Int}, Float64}()
+    cost = Dict{Tuple{String,Int}, Float64}()
     
-    for tech in technology, year in year_all
-        if haskey(lifetime, tech) && lifetime[tech] > 0 && haskey(hours, tech) && hours[tech] > 0
-            # Capacity-related costs (annuity of investment + FOM) in $/kW
-            if haskey(inv, (tech, year)) && haskey(fom, (tech, year))
-                annuity_factor = ((1 + discount_rate)^lifetime[tech] * discount_rate) / ((1 + discount_rate)^lifetime[tech] - 1)
-                cost_capacity[(tech, year)] = (inv[(tech, year)] * annuity_factor + fom[(tech, year)]) * 1000
-            end
-            
-            # Activity-related costs in $/MWh
-            if haskey(vom, (tech, year))
-                cost_activity[(tech, year)] = vom[(tech, year)]
-            end
-            
-            # Total costs in $/MWh
-            if haskey(cost_capacity, (tech, year)) && haskey(cost_activity, (tech, year))
-                cost[(tech, year)] = cost_capacity[(tech, year)] / hours[tech] + cost_activity[(tech, year)]
-            end
+    # Pre-calculate annuity factors to avoid repeated computation
+    annuity_factors = Dict{String, Float64}()
+    for tech in technology
+        if haskey(lifetime, tech) && lifetime[tech] > 0
+            lt = lifetime[tech]
+            annuity_factors[tech] = ((1 + discount_rate)^lt * discount_rate) / ((1 + discount_rate)^lt - 1)
+        end
+    end
+    
+    # Pre-filter valid technologies to avoid repeated checks
+    valid_techs = [tech for tech in technology 
+                   if haskey(lifetime, tech) && lifetime[tech] > 0 && 
+                      haskey(hours, tech) && hours[tech] > 0]
+    
+    for tech in valid_techs, year in year_all
+        # Capacity-related costs (annuity of investment + FOM) in $/kW
+        if haskey(inv, (tech, year)) && haskey(fom, (tech, year))
+            cost_capacity[(tech, year)] = (inv[(tech, year)] * annuity_factors[tech] + fom[(tech, year)]) * 1000
+        end
+        
+        # Activity-related costs in $/MWh
+        if haskey(vom, (tech, year))
+            cost_activity[(tech, year)] = vom[(tech, year)]
+        end
+        
+        # Total costs in $/MWh
+        if haskey(cost_capacity, (tech, year)) && haskey(cost_activity, (tech, year))
+            cost[(tech, year)] = cost_capacity[(tech, year)] / hours[tech] + cost_activity[(tech, year)]
         end
     end
     
