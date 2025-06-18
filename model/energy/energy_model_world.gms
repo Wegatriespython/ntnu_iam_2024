@@ -280,6 +280,14 @@ TABLE
 
 PARAMETER lifetime(technology)               'technical lifetime'
     /
+    coal_extr    30
+    gas_extr     30
+    oil_extr     30
+    nuclear_fuel 40
+    bio_pot      20
+    hydro_pot    80
+    wind_pot     20
+    solar_pot    20
     coal_ppl     30
     gas_ppl      20
     oil_ppl      20
@@ -295,10 +303,20 @@ PARAMETER lifetime(technology)               'technical lifetime'
     bio_nele     20
     solar_nele   20
     other_nele   20
+    electricity_grid 40
+    appliances   15
 / ;
 
 PARAMETER hours(technology)                  'full load hours'
     /
+    coal_extr    7000
+    gas_extr     7000
+    oil_extr     7000
+    nuclear_fuel 7000
+    bio_pot      7000
+    hydro_pot    4500
+    wind_pot     2000
+    solar_pot    1200
     coal_ppl     7000
     gas_ppl      6000
     oil_ppl      6000
@@ -314,6 +332,8 @@ PARAMETER hours(technology)                  'full load hours'
     bio_nele     7000
     solar_nele   7000
     other_nele   7000
+    electricity_grid 8760
+    appliances   8760
 / ;
 
 PARAMETER cost(technology, year_all)                 'total technology costs on activity basis [$/MWh]'
