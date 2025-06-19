@@ -1,0 +1,202 @@
+{
+  "timestamp": "2025-06-19",
+  "model": "GBD Energy-Macro Reformulation",
+  "verification_status": "In Progress",
+  "results": {
+    "dimensional_consistency": [
+      {
+        "description": "Energy cost conversion in Benders cuts",
+        "formula": "v = TOTAL_COST / 1000",
+        "dimensions": "B$ -> T$",
+        "consistent": true,
+        "note": "Correct conversion from billion to trillion USD"
+      },
+      {
+        "description": "Dual variable conversion",
+        "formula": "lambda = -dual(constraint) / 1000",
+        "dimensions": "T$/PWh (trillion USD per PWh)",
+        "consistent": true,
+        "note": "Dual values represent marginal energy costs in T$/PWh"
+      },
+      {
+        "description": "Energy cost expansion in master problem",
+        "formula": "EC[y] = theta * weight / (discount_factor * time)",
+        "dimensions": "T$ * dimensionless / (dimensionless * years) = T$",
+        "consistent": true,
+        "note": "Distributes total energy cost theta across years"
+      },
+      {
+        "description": "Benders cut constraint",
+        "formula": "theta >= cost + sum(price * quantity_difference)",
+        "dimensions": "T$ >= T$ + sum(T$/PWh * PWh) = T$",
+        "consistent": true,
+        "note": "All terms in trillion USD - dimensionally consistent"
+      }
+    ],
+    "dual_calculation": {
+      "theory": {
+        "mathematical_basis": {
+          "description": "Lagrangian duality theory",
+          "formula": "lambda_i = \u2202L/\u2202b_i where L is Lagrangian, b_i is RHS of constraint i",
+          "interpretation": "Shadow price = marginal cost of relaxing constraint"
+        },
+        "sign_convention": {
+          "description": "Dual values for balance constraints",
+          "formula": "lambda = -dual(balance_constraint)",
+          "rationale": "Balance constraints: supply + slack = demand, dual gives marginal value of demand increase",
+          "note": "Negative sign converts from supply-demand to willingness-to-pay interpretation"
+        },
+        "aggregation": {
+          "description": "Multiple energy carriers map to same sector",
+          "formula": "lambda[(s,y)] += contribution from each (e,l,y) mapping to sector s",
+          "issue": "Potential double-counting if multiple (e,l) pairs map to same sector",
+          "recommendation": "Verify map_energy_sector is one-to-one or properly weighted"
+        },
+        "scaling": {
+          "description": "Unit conversion billion to trillion",
+          "formula": "lambda_final = lambda_solver / 1000",
+          "consistency": "Must match cost scaling in objective"
+        }
+      },
+      "potential_issues": [
+        {
+          "issue": "Multiple energy balance constraints per sector",
+          "description": "If multiple (energy, level) pairs map to same sector, duals are summed",
+          "risk": "Could overestimate marginal value",
+          "solution": "Weight by energy carrier importance or use separate sectors"
+        },
+        {
+          "issue": "Slack variable dual values",
+          "description": "Demand slack variables have penalty coefficient 1e6",
+          "risk": "If slack is active, dual may be artificially high",
+          "solution": "Check slack variable values in solution"
+        },
+        {
+          "issue": "Conversion timing",
+          "description": "Dual conversion must be consistent with cost conversion",
+          "risk": "Inconsistent scaling leads to wrong Benders cuts",
+          "solution": "Verify both conversions use same factor (1/1000)"
+        }
+      ]
+    },
+    "benders_cuts": {
+      "theory": {
+        "mathematical_foundation": {
+          "description": "Benders decomposition theory",
+          "formula": "theta >= f(S_k) + \u2207f(S_k)^T * (S - S_k)",
+          "where": {
+            "f(S_k)": "Optimal objective value at iteration k",
+            "\u2207f(S_k)": "Gradient approximated by dual values",
+            "S_k": "Service demands at iteration k"
+          }
+        },
+        "implementation": {
+          "theta_bound": "theta >= cut.v + sum(lambda[s,y] * (S[s,y] - S_hat[s,y]))",
+          "cut.v": "TOTAL_COST / 1000 (converted to trillion USD)",
+          "lambda[s,y]": "-dual(balance_constraint) / 1000",
+          "S_hat[s,y]": "Service demands from previous iteration"
+        },
+        "convergence_properties": {
+          "convexity": "Energy subproblem must be convex in S for convergence",
+          "lower_bound": "Each cut provides lower bound on theta",
+          "tightening": "Cuts become tighter as algorithm progresses"
+        }
+      },
+      "properties": [
+        {
+          "property": "Convexity of energy subproblem in S",
+          "requirement": "f(S) must be convex function of service demands S",
+          "verification": "Check if energy balance constraints are linear in S",
+          "status": "Need to verify - depends on energy model structure"
+        },
+        {
+          "property": "Feasibility of energy subproblem",
+          "requirement": "Energy subproblem must be feasible for all reasonable S values",
+          "verification": "Check bounds on S variables and energy supply capabilities",
+          "status": "Critical - infeasibility here causes GBD failure"
+        },
+        {
+          "property": "Boundedness of optimal solution",
+          "requirement": "Energy subproblem optimal value must be bounded",
+          "verification": "Check for unbounded energy supply or unrealistic costs",
+          "status": "Need to verify - depends on model parameters"
+        },
+        {
+          "property": "Valid linear approximation",
+          "requirement": "Benders cut provides valid lower bound on f(S)",
+          "verification": "theta >= v + lambda*(S-S_hat) <= f(S) for all feasible S",
+          "status": "Depends on dual variable correctness"
+        }
+      ]
+    },
+    "infeasibility_sources": [
+      {
+        "source": "Variable bounds inconsistency",
+        "description": "Upper/lower bounds may be inconsistent with constraints",
+        "specific_issues": [
+          "theta upper bound = 50 T$ may be too restrictive",
+          "Service demand S bounds may not allow feasible energy solutions",
+          "Capital/production bounds may prevent meeting energy service demands"
+        ],
+        "diagnostic": "Check if removing bounds allows feasible solution",
+        "location": "set_gbd_master_bounds_and_initial_values! function"
+      },
+      {
+        "source": "Energy subproblem infeasibility",
+        "description": "Service demands S may exceed energy supply capabilities",
+        "specific_issues": [
+          "High S values require more energy supply than technically possible",
+          "Technology capacity constraints limit energy production",
+          "Resource availability constraints (coal, gas, renewable potential)"
+        ],
+        "diagnostic": "Test energy subproblem with various S values independently",
+        "location": "create_energy_subproblem function"
+      },
+      {
+        "source": "Master problem constraint inconsistency",
+        "description": "MACRO constraints may be incompatible with Benders cuts",
+        "specific_issues": [
+          "CES production function parameters may be inconsistent",
+          "Energy-economy linkage through AEEI factors",
+          "Capital accumulation dynamics vs energy service growth"
+        ],
+        "diagnostic": "Solve master problem without Benders cuts",
+        "location": "create_master_problem function"
+      },
+      {
+        "source": "Numerical scaling problems",
+        "description": "Large differences in variable scales cause numerical issues",
+        "specific_issues": [
+          "Billion vs trillion USD scaling",
+          "PWh energy units vs monetary units",
+          "Time period scaling (10-year periods)",
+          "Very large penalty on demand slack (1e6)"
+        ],
+        "diagnostic": "Rescale all variables to similar magnitudes",
+        "location": "Throughout model formulation"
+      },
+      {
+        "source": "Poor initial values",
+        "description": "Starting values may be far from feasible region",
+        "specific_issues": [
+          "theta starting value = 40 T$ may be inappropriate",
+          "Service demand starting values from enestart",
+          "Capital/production starting values from historical data"
+        ],
+        "diagnostic": "Try different initialization strategies",
+        "location": "Variable initialization in both problems"
+      },
+      {
+        "source": "Solver tolerance settings",
+        "description": "Solver settings may be too strict or too loose",
+        "specific_issues": [
+          "Ipopt tolerance settings tol=1e-6 for subproblem, 1e-5 for master",
+          "Maximum iterations: 1000 for subproblem, 2000 for master",
+          "Convergence tolerance rel <= 1e-4 for GBD"
+        ],
+        "diagnostic": "Try relaxed tolerances and more iterations",
+        "location": "Solver configuration in both problems"
+      }
+    ]
+  }
+}

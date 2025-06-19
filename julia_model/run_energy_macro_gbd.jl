@@ -10,17 +10,21 @@
 using JuMP, Ipopt, LinearAlgebra
 println("Starting Energy-Macro GBD decomposition...")
 
-# include shared definitions
-include("shared.jl");
-println("✓ loaded shared definitions");
-include("energy_model_world.jl");
-println("✓ loaded energy model");
-include("macro_data_load.jl");
-println("✓ loaded macro data");
-include("macro_core.jl");
-println("✓ loaded macro core");
-include("macro_presolve.jl");
-println("✓ loaded macro preprocessing");
+# Only include files if not already in module context
+if !@isdefined(year_all)  # Check if shared.jl already loaded
+    include("shared.jl");
+    println("✓ loaded shared definitions");
+    include("energy_model_world.jl");
+    println("✓ loaded energy model");
+    include("macro_data_load.jl");
+    println("✓ loaded macro data");
+    include("macro_core.jl");
+    println("✓ loaded macro core");
+    include("macro_presolve.jl");
+    println("✓ loaded macro preprocessing");
+else
+    println("✓ using existing module definitions");
+end
 
 # 1 Energy sub-problem (fixed service demands S_bar)
 function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64})

@@ -1,0 +1,40 @@
+
+\documentclass{article}
+\usepackage{amsmath, amssymb}
+\title{GBD Reformulation Mathematical Verification}
+\author{Claude Code Assistant}
+\date{2025-06-19}
+
+\begin{document}
+\maketitle
+
+\section{Energy Subproblem}
+\begin{align}
+\min \quad & \text{TOTAL\_COST} + 10^6 \sum_{s,y} \text{slack}_{s,y} \\
+\text{s.t.} \quad & \sum_t \text{ACT}_{t,y} \cdot (\text{output}_{t,e,l} - \text{input}_{t,e,l}) + \text{slack}_{s,y} = \bar{S}_{s,y} \\
+& \sum_y \text{COST\_ANNUAL}_y \cdot \text{discount}_y = \text{TOTAL\_COST} \\
+& \text{Technology and capacity constraints} \\
+& \text{ACT}_{t,y}, \text{CAP\_NEW}_{t,y}, \text{slack}_{s,y} \geq 0
+\end{align}
+
+\section{Master Problem}
+\begin{align}
+\min \quad & -\text{UTILITY} + \theta \\
+\text{s.t.} \quad & \text{UTILITY} = \sum_y \text{udf}_y \log(C_y) \cdot T \\
+& Y_y = C_y + I_y + EC_y \\
+& K_y = K_{y-1}(1-\delta)^T + KN_y \\
+& KN_y = T \cdot I_y \\
+& S_{s,y} = \text{PRODENE}_{s,y} \cdot \text{aeei}_{s,y} \\
+& \text{Benders cuts: } \theta \geq v_k + \sum_{s,y} \lambda_{s,y}^k (S_{s,y} - \hat{S}_{s,y}^k)
+\end{align}
+
+\section{Dimensional Analysis}
+\begin{itemize}
+\item Energy costs: Billion USD $\rightarrow$ Trillion USD (factor 1000)
+\item Service demands: PWh (petawatt-hours)
+\item Dual variables: Trillion USD / PWh
+\item Time periods: 10-year duration
+\end{itemize}
+
+\end{document}
+        

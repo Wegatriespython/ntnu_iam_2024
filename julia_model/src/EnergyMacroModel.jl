@@ -11,6 +11,9 @@ include("../macro_data_load.jl")
 include("../macro_core.jl")
 include("../macro_presolve.jl")
 
+# Include GBD components (will skip includes due to guard)
+include("../run_energy_macro_gbd.jl")
+
 # Define the solve function directly here to avoid including run_energy_macro.jl
 # which would cause duplicate includes
 function solve_energy_macro_model()
@@ -177,7 +180,19 @@ function save_results(model)
     return results
 end
 
-# Export the main function
-export solve_energy_macro_model
+# Export functions for testing and use
+export solve_energy_macro_model, create_integrated_model, save_results
+export solve_gbd, create_energy_subproblem, create_master_problem
+export add_opt_cut!, set_gbd_master_bounds_and_initial_values!
+export BendersCut
+
+# Export key parameters and data structures for testing
+export year_all, sector, technology, energy, level
+export duration_period, drate, depr, esub, kpvs, elvs, rho
+export k0, y0, c0, i0, a, b
+export enestart, eneprice, cost_MESSAGE, aeei_factor
+export newlab, udf, growth_factor, potential_gdp
+export demand_base, finite_time_corr
+export gdp_base, kgdp, ecst0, grow
 
 end # module
