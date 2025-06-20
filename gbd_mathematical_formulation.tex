@@ -1,0 +1,322 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\geometry{margin=1in}
+
+\title{Mathematical Formulation of the Energy-Macro Integrated Assessment Model\\
+Using Generalized Benders Decomposition}
+\author{Julia Implementation Analysis}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document provides a complete mathematical description of the energy-macro integrated assessment model implemented in \texttt{run\_energy\_macro\_gbd.jl}. The model combines a technology-rich energy system optimization (MESSAGE framework) with a macroeconomic model (MACRO framework) using Generalized Benders Decomposition (GBD) to analyze climate and energy policies. The energy subproblem minimizes total system cost subject to service demand constraints, while the master problem maximizes utility subject to macroeconomic constraints and Benders cuts.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction}
+
+The energy-macro integrated assessment model implements a decomposition approach where:
+\begin{itemize}
+\item The \textbf{energy subproblem} optimizes technology choices for fixed energy service demands
+\item The \textbf{master problem} determines optimal macroeconomic variables and energy service demands
+\item \textbf{Benders cuts} coordinate the two subproblems through shadow price information
+\end{itemize}
+
+Key modeling conventions:
+\begin{itemize}
+\item All monetary variables in the macro model are in trillion USD
+\item Energy system costs are in billion USD (converted to trillion in Benders cuts)
+\item Time horizon: 2020-2080 in 10-year periods
+\item Energy sectors: Electricity (ELEC) and Non-electricity (NELE)
+\end{itemize}
+
+\section{Sets and Parameters}
+
+\subsection{Index Sets}
+\begin{align}
+\mathcal{T} &= \{2020, 2030, 2040, 2050, 2060, 2070, 2080\} && \text{Time periods} \\
+\mathcal{S} &= \{\text{ELEC}, \text{NELE}\} && \text{Energy sectors} \\
+\mathcal{I} &= \{1, 2, \ldots, 38\} && \text{Technologies} \\
+\mathcal{E} &= \{\text{energy carriers}\} && \text{Energy carriers} \\
+\mathcal{L} &= \{\text{levels}\} && \text{Energy system levels}
+\end{align}
+
+\subsection{Key Parameters}
+
+\subsubsection{Economic Parameters}
+\begin{align}
+\text{gdp}_{\text{base}} &= 71.0 && \text{Base year GDP (trillion USD)} \\
+\kappa_{\text{gdp}} &= 2.8 && \text{Capital-to-GDP ratio} \\
+\delta &= 0.05 && \text{Annual depreciation rate} \\
+r &= 0.05 && \text{Social discount rate} \\
+\sigma &= 0.3 && \text{Elasticity of substitution} \\
+\rho &= \frac{\sigma - 1}{\sigma} && \text{CES function exponent} \\
+\alpha_k &= 0.28 && \text{Capital value share} \\
+\alpha_e &= 0.42 && \text{Electricity value share}
+\end{align}
+
+\subsubsection{Energy System Parameters}
+\begin{align}
+\text{hours}_i &\quad && \text{Capacity factor for technology } i \\
+\text{lifetime}_i &\quad && \text{Economic lifetime (years)} \\
+\text{vom}_{i,t} &\quad && \text{Variable O\&M cost} \\
+\text{cost\_capacity}_{i,t} &\quad && \text{Capital cost} \\
+\text{CO2\_emission}_i &\quad && \text{Emission factor} \\
+\text{output}_{i,e,l}, \text{input}_{i,e,l} &\quad && \text{Technology input/output coefficients}
+\end{align}
+
+\subsubsection{Time Parameters}
+\begin{align}
+\text{duration\_period} &= 10 && \text{MACRO time discretization (years)} \\
+\text{period\_length} &= 10 && \text{MESSAGE time discretization (years)}
+\end{align}
+
+\section{Energy Subproblem}
+
+The energy subproblem minimizes total energy system cost for fixed energy service demands $\bar{S}_{s,t}$.
+
+\subsection{Decision Variables}
+\begin{align}
+\text{ACT}_{i,t} &\geq 0 && \text{Activity level of technology } i \text{ in period } t \\
+\text{CAP\_NEW}_{i,t} &\geq 0 && \text{New capacity of technology } i \text{ in period } t \\
+\text{EMISS}_t &\quad && \text{Annual emissions in period } t \\
+\text{CUM\_EMISS} &\quad && \text{Cumulative emissions} \\
+\text{TOTAL\_COST} &\quad && \text{Total system cost (billion USD)} \\
+\text{COST\_ANNUAL}_t &\quad && \text{Annual cost in period } t \\
+\text{demand\_slack}_{s,t} &\geq 0 && \text{Demand slack variables}
+\end{align}
+
+\subsection{Energy Balance Constraints}
+For each energy carrier $e$, level $l$, and time period $t$:
+\begin{equation}
+\sum_{i \in \mathcal{I}} \text{ACT}_{i,t} \cdot (\text{output}_{i,e,l} - \text{input}_{i,e,l}) + \text{demand\_slack}_{s,t} = \frac{\bar{S}_{s,t}}{n_{\text{map},s}}
+\end{equation}
+where $n_{\text{map},s}$ is the number of energy-level combinations mapping to sector $s$.
+
+\subsection{Capacity Constraints}
+Activity is limited by available capacity:
+\begin{equation}
+\text{ACT}_{i,t} \leq \sum_{t' \leq t} \text{CAP\_NEW}_{i,t'} \cdot \text{hours}_i \cdot \mathbf{1}_{(t-t'+1) \cdot \text{period\_length} \leq \text{lifetime}_i}
+\end{equation}
+
+\subsection{Growth Constraints}
+Technology diffusion constraints:
+\begin{equation}
+\text{CAP\_NEW}_{i,t} \leq \text{CAP\_NEW}_{i,t-1} \cdot (1 + \text{diffusion\_up}_i)^{\text{period\_length}} + \text{startup}_i
+\end{equation}
+
+\subsection{Share Constraints}
+Technology portfolio constraints:
+\begin{align}
+\sum_{i \in \mathcal{I}_{\text{lhs}}} \text{ACT}_{i,t} &\leq \text{share\_up}_s \cdot \sum_{i \in \mathcal{I}_{\text{rhs}}} \text{ACT}_{i,t} \\
+\sum_{i \in \mathcal{I}_{\text{lhs}}} \text{ACT}_{i,t} &\geq \text{share\_lo}_s \cdot \sum_{i \in \mathcal{I}_{\text{rhs}}} \text{ACT}_{i,t}
+\end{align}
+
+\subsection{Emissions Accounting}
+\begin{align}
+\text{EMISS}_t &= \sum_{i \in \mathcal{I}} \text{ACT}_{i,t} \cdot \text{CO2\_emission}_i \\
+\text{CUM\_EMISS} &= \sum_{t \in \mathcal{T}} \text{EMISS}_t \cdot \text{duration\_period}
+\end{align}
+
+\subsection{Cost Accounting}
+Annual costs:
+\begin{equation}
+\text{COST\_ANNUAL}_t = \sum_{i \in \mathcal{I}} \text{ACT}_{i,t} \cdot \text{vom}_{i,t} + \sum_{i \in \mathcal{I}} \sum_{t' \in \mathcal{L}_{i,t}} \text{CAP\_NEW}_{i,t'} \cdot \text{cost\_capacity}_{i,t'}
+\end{equation}
+where $\mathcal{L}_{i,t}$ includes all periods $t'$ such that capacity installed in $t'$ is still operational in $t$.
+
+Total discounted cost:
+\begin{equation}
+\text{TOTAL\_COST} = \sum_{t \in \mathcal{T}} \text{COST\_ANNUAL}_t \cdot \text{duration\_period} \cdot (1-r)^{\text{duration\_period} \cdot (|\{t' \in \mathcal{T} : t' \leq t\}| - 1)}
+\end{equation}
+
+\subsection{Objective Function}
+\begin{equation}
+\min \quad \text{TOTAL\_COST} + 10^6 \cdot \sum_{s,t} \text{demand\_slack}_{s,t}
+\end{equation}
+
+\section{Master Problem}
+
+The master problem maximizes utility subject to macroeconomic constraints and Benders cuts.
+
+\subsection{Decision Variables}
+\begin{align}
+S_{s,t} &\geq 0 && \text{Energy service demand} \\
+\text{PHYSENE}_{s,t} &\geq 0 && \text{Physical energy services} \\
+\theta &\geq 0 && \text{Energy cost approximation (trillion USD)} \\
+K_t &\geq 0 && \text{Capital stock} \\
+\text{KN}_t &\geq 0 && \text{New capital} \\
+Y_t &\geq 0 && \text{Total output} \\
+\text{YN}_t &\geq 0 && \text{New output} \\
+\text{PRODENE}_{s,t} &\geq 0 && \text{Energy services in production} \\
+\text{NEWENE}_{s,t} &\geq 0 && \text{New energy services} \\
+C_t &\geq 0 && \text{Consumption} \\
+I_t &\geq 0 && \text{Investment} \\
+\text{UTILITY} &\quad && \text{Total utility} \\
+\text{EC}_t &\quad && \text{Energy system costs}
+\end{align}
+
+\subsection{Utility Function}
+\begin{equation}
+\text{UTILITY} = \sum_{t \in \mathcal{T} \setminus \{2020, 2080\}} \text{udf}_t \cdot \ln(C_t) \cdot \text{duration\_period} + \text{udf}_{2080} \cdot \ln(C_{2080}) \cdot \left(\text{duration\_period} + \frac{1}{\text{finite\_time\_corr}_{2080}}\right)
+\end{equation}
+
+\subsection{Macroeconomic Accounting}
+Output allocation:
+\begin{equation}
+Y_t = C_t + I_t + \text{EC}_t \quad \forall t \in \mathcal{T}
+\end{equation}
+
+New capital formation:
+\begin{equation}
+\text{KN}_t = \text{duration\_period} \cdot I_t \quad \forall t \in \mathcal{T} \setminus \{2020\}
+\end{equation}
+
+\subsection{CES Production Function}
+New production vintage:
+\begin{equation}
+\text{YN}_t = \left(a \cdot \text{KN}_t^{\rho \cdot \alpha_k} \cdot \text{newlab}_t^{\rho \cdot (1-\alpha_k)} + b \cdot \text{NEWENE}_{\text{ELEC},t}^{\rho \cdot \alpha_e} \cdot \text{NEWENE}_{\text{NELE},t}^{\rho \cdot (1-\alpha_e)}\right)^{1/\rho}
+\end{equation}
+
+\subsection{Capital Dynamics}
+\begin{equation}
+K_t = K_{t-1} \cdot (1-\delta)^{\text{duration\_period}} + \text{KN}_t \quad \forall t \in \mathcal{T} \setminus \{2020\}
+\end{equation}
+
+\subsection{Production Dynamics}
+\begin{equation}
+Y_t = Y_{t-1} \cdot (1-\delta)^{\text{duration\_period}} + \text{YN}_t \quad \forall t \in \mathcal{T} \setminus \{2020\}
+\end{equation}
+
+\subsection{Energy Service Dynamics}
+\begin{equation}
+\text{PRODENE}_{s,t} = \text{PRODENE}_{s,t-1} \cdot (1-\delta)^{\text{duration\_period}} + \text{NEWENE}_{s,t} \quad \forall s,t \text{ with } t \neq 2020
+\end{equation}
+
+\subsection{Energy Service Link}
+\begin{align}
+S_{s,t} &= \text{PRODENE}_{s,t} \cdot \text{aeei\_factor}_{s,t} \\
+\text{PHYSENE}_{s,t} &= S_{s,t}
+\end{align}
+
+\subsection{Energy Cost Approximation}
+\begin{equation}
+\text{EC}_t = \theta \cdot \frac{\text{cost\_MESSAGE}_t}{\sum_{t' \neq 2020} \text{cost\_MESSAGE}_{t'}} \cdot \frac{1}{\text{disc}_t \cdot \text{duration\_period}}
+\end{equation}
+where $\text{disc}_t = (1-r)^{\text{duration\_period} \cdot (|\{t' \leq t\}| - 1)}$.
+
+\subsection{Terminal Condition}
+\begin{equation}
+I_{2080} \geq K_{2080} \cdot (\text{grow}_{2080} + \delta)
+\end{equation}
+
+\subsection{Objective Function}
+\begin{equation}
+\min \quad -\text{UTILITY} + \theta
+\end{equation}
+
+\section{Benders Decomposition}
+
+\subsection{Benders Cut Structure}
+Each optimality cut is defined by:
+\begin{align}
+\text{type} &: \text{``optimality'' or ``feasibility''} \\
+v &: \text{Energy system cost (trillion USD)} \\
+\lambda_{s,t} &: \text{Dual variables (trillion USD / PWh)} \\
+\hat{S}_{s,t} &: \text{Incumbent energy service demands}
+\end{align}
+
+\subsection{Optimality Cut}
+\begin{equation}
+\theta \geq v + \sum_{s,t} \lambda_{s,t} \cdot (S_{s,t} - \hat{S}_{s,t})
+\end{equation}
+
+\subsection{Dual Variable Extraction}
+Shadow prices from energy balance constraints are extracted and converted:
+\begin{equation}
+\lambda_{s,t} = -\frac{\text{dual}(\text{energy\_balance}_{e,l,t})}{1000} \quad \text{(billion to trillion USD conversion)}
+\end{equation}
+
+\section{GBD Algorithm}
+
+\begin{algorithm}
+\caption{Generalized Benders Decomposition Algorithm}
+\begin{algorithmic}[1]
+\STATE Initialize: $S^0_{s,t} = \text{enestart}_{s,t}$, $k = 0$, $\text{cuts} = \emptyset$
+\STATE Set bounds: $\text{LB} = -\infty$, $\text{UB} = +\infty$
+\WHILE{$k < \text{maxit}$ and $\text{rel\_gap} > \text{tol}$}
+    \STATE $k \leftarrow k + 1$
+    \STATE \textbf{Energy Subproblem:}
+    \STATE \quad Solve energy subproblem with $\bar{S} = S^{k-1}$
+    \STATE \quad Extract: $v^k = \text{TOTAL\_COST} / 1000$, $\lambda^k_{s,t}$
+    \STATE \quad Update: $\text{UB} = \min(\text{UB}, v^k)$
+    \STATE \quad Add cut: $\text{cuts} \leftarrow \text{cuts} \cup \{(v^k, \lambda^k, S^{k-1})\}$
+    \STATE \textbf{Master Problem:}
+    \STATE \quad Add all cuts to master problem
+    \STATE \quad Solve master problem
+    \STATE \quad Extract: $\theta^k$, $\text{UTILITY}^k$, $S^k_{s,t}$
+    \STATE \quad Update: $\text{LB} = \max(\text{LB}, -\text{UTILITY}^k + \theta^k)$
+    \STATE \textbf{Convergence Check:}
+    \STATE \quad $\text{gap} = |(\theta^k - \text{UTILITY}^k) - v^k|$
+    \STATE \quad $\text{rel\_gap} = \text{gap} / \max(|\theta^k - \text{UTILITY}^k|, |v^k|, 1)$
+\ENDWHILE
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Convergence Criterion}
+The algorithm converges when:
+\begin{equation}
+\frac{|(\theta^k - \text{UTILITY}^k) - v^k|}{\max(|\theta^k - \text{UTILITY}^k|, |v^k|, 1)} \leq \text{tol}
+\end{equation}
+
+The gap represents the difference between:
+\begin{itemize}
+\item $\theta^k - \text{UTILITY}^k$: Master problem assessment of total cost
+\item $v^k$: Actual energy system cost from subproblem
+\end{itemize}
+
+\section{Implementation Notes}
+
+\subsection{Scaling Conventions}
+\begin{itemize}
+\item Energy subproblem variables and costs: billion USD
+\item Master problem variables and utility: trillion USD  
+\item Conversion factor: 1000 (applied once in Benders cuts)
+\item No other ad-hoc scaling factors
+\end{itemize}
+
+\subsection{Solver Configuration}
+\begin{itemize}
+\item Energy subproblem: Ipopt with tolerance $10^{-6}$, max iterations 1000
+\item Master problem: Ipopt with tolerance $10^{-5}$, max iterations 2000
+\item Default GBD tolerance: $10^{-4}$, max iterations 20
+\end{itemize}
+
+\subsection{Numerical Stability}
+\begin{itemize}
+\item Demand slack variables prevent infeasibility
+\item Variable bounds prevent numerical issues
+\item Starting values provided for key variables
+\item Penalty weight $10^6$ on demand slack
+\end{itemize}
+
+\section{Conclusion}
+
+This mathematical formulation provides a complete description of the energy-macro integrated assessment model using Generalized Benders Decomposition. The decomposition allows for efficient solution of the large-scale optimization problem by exploiting the natural structure separating energy system optimization from macroeconomic planning. The coordination through shadow prices ensures economic consistency between energy costs and macroeconomic welfare maximization.
+
+The model represents a sophisticated approach to integrated assessment modeling, combining detailed technology representation with rigorous economic foundations through established decomposition techniques.
+
+\end{document}
