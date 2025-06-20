@@ -39,6 +39,21 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 - Energy services: Petawatt-hours (PWh)
 - Automatic unit conversion in GBD interface (1000x scaling factor)
 
+### Time Parameter Definitions
+**CRITICAL**: The model uses two distinct time parameters that must not be confused:
+
+- **`duration_period`** (10 years): MACRO model time discretization
+  - Used for: Macroeconomic dynamics, depreciation, growth calculations, utility discounting
+  - Domain: Economic model (capital accumulation, labor growth, AEEI factors)
+  - Files: `macro_data_load.jl`, `macro_core.jl`, economic parts of GBD
+
+- **`period_length`** (10 years): MESSAGE model time discretization  
+  - Used for: Technology lifetime constraints, capacity planning, energy system accounting
+  - Domain: Energy model (technology constraints, emissions, energy costs)
+  - Files: `energy_model_world.jl`, `src/EnergyMacroModel.jl`, energy parts of GBD
+
+**Note**: While both currently equal 10 years, they represent conceptually different time scales and should be used consistently within their respective domains to maintain model integrity.
+
 ### Mathematical Formulation
 - **Energy Subproblem**: Minimizes total system cost subject to service demand constraints
 - **Master Problem**: Maximizes utility subject to macroeconomic constraints and Benders cuts

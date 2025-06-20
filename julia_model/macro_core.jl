@@ -1,7 +1,7 @@
 # macro_core.jl - Equivalent to macro/macro_core.gms
 # MACRO core formulation with utility maximization and CES production
 
-using JuMP
+# using JuMP
 
 # ------------------------------------------------------------------------------
 # MACRO model variables and equations

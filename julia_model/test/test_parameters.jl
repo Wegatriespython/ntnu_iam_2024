@@ -22,6 +22,32 @@ using EnergyMacroModel
     @test duration_period == 10
 end
 
+@testset "Configuration Structure" begin
+    # Test default configuration
+    config = default_config()
+    @test config.base_year == 2020
+    @test config.final_year == 2080
+    @test config.gdp_base == 71.0
+    @test config.drate == 0.05
+    
+    # Test custom configuration
+    custom = custom_config(gdp_base = 80.0, drate = 0.04)
+    @test custom.gdp_base == 80.0
+    @test custom.drate == 0.04
+    @test custom.base_year == 2020  # default values preserved
+    
+    # Test year sequence generation
+    years = generate_year_sequence(config)
+    @test years == [2020, 2030, 2040, 2050, 2060, 2070, 2080]
+    
+    # Test derived parameters calculation
+    derived = calculate_derived_parameters(config)
+    @test haskey(derived, :year_all)
+    @test haskey(derived, :rho)
+    @test haskey(derived, :k0)
+    @test derived.rho ≈ (config.esub - 1) / config.esub
+end
+
 @testset "Economic Parameters" begin
     @test gdp_base > 0
     @test kgdp > 0  

@@ -12,6 +12,8 @@ println("Starting Energy-Macro GBD decomposition...")
 
 # Only include files if not already in module context
 if !@isdefined(year_all)  # Check if shared.jl already loaded
+    include("model_config.jl");
+    println("✓ loaded model configuration");
     include("shared.jl");
     println("✓ loaded shared definitions");
     include("energy_model_world.jl");
@@ -27,11 +29,11 @@ else
 end
 
 # 1 Energy sub-problem (fixed service demands S_bar)
-function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64})
+function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64}, config::ModelConfig = default_config())
   model = Model(Ipopt.Optimizer)
   set_optimizer_attribute(model, "print_level", 0)
-  set_optimizer_attribute(model, "tol", 1e-6)
-  set_optimizer_attribute(model, "max_iter", 1000)
+  set_optimizer_attribute(model, "tol", config.solver_tolerance)
+  set_optimizer_attribute(model, "max_iter", config.solver_max_iter)
 
   # decision variables
   @variable(model, ACT[technology, year_all] >= 0)
@@ -73,7 +75,7 @@ function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64})
       idx = findfirst(==(y), year_all)
       @constraint(model,
         ACT[t, y] <= sum(CAP_NEW[t, year_all[i]] * hours[t]
-                        for i in 1:idx if (idx - i + 1) * duration_period <= lifetime[t]))
+                        for i in 1:idx if (idx - i + 1) * period_length <= lifetime[t]))
     end
   end
   for t in technology, y in year_all[2:end]
@@ -81,7 +83,7 @@ function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64})
       continue
     end
     y_prev = year_all[findfirst(==(y), year_all)-1]
-    @constraint(model, CAP_NEW[t, y] <= CAP_NEW[t, y_prev] * (1 + diffusion_up[t])^duration_period + get(startup, t, 0))
+    @constraint(model, CAP_NEW[t, y] <= CAP_NEW[t, y_prev] * (1 + diffusion_up[t])^period_length + get(startup, t, 0))
   end
 
   # share constraints
@@ -108,7 +110,7 @@ function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64})
       continue
     end
     idx, lt = year_idx[y], lifetime[t]
-    lifetime_r[(t, y)] = [y2 for y2 in year_all if year_idx[y2] <= idx && (idx - year_idx[y2] + 1) * duration_period <= lt]
+    lifetime_r[(t, y)] = [y2 for y2 in year_all if year_idx[y2] <= idx && (idx - year_idx[y2] + 1) * period_length <= lt]
   end
   disc = Dict(y => (1 - drate)^(duration_period * (year_idx[y] - 1)) for y in year_all)
   @constraint(model, [y in year_all],

@@ -4,6 +4,9 @@ using JuMP
 using Ipopt
 using LinearAlgebra
 
+# Include configuration first
+include("../model_config.jl")
+
 # Include all model components in the module scope (only once)
 include("../shared.jl")
 include("../energy_model_world.jl") 
@@ -14,15 +17,19 @@ include("../macro_presolve.jl")
 # Include GBD components (will skip includes due to guard)
 include("../run_energy_macro_gbd.jl")
 
-# Define the solve function directly here to avoid including run_energy_macro.jl
-# which would cause duplicate includes
-function solve_energy_macro_model()
+# Define the solve function with configurable parameters
+function solve_energy_macro_model(config::ModelConfig = default_config())
+    # Update global configuration if provided
+    if config != MODEL_CONFIG
+        update_model_config!(config)
+    end
+    
     println("\n" * "="^60)
     println("SOLVING ENERGY-MACRO INTEGRATED MODEL")
     println("="^60)
     
     # Create the model
-    model = create_integrated_model()
+    model = create_integrated_model(config)
     
     # Solve the optimization problem
     println("\nStarting optimization...")
@@ -71,12 +78,12 @@ function solve_energy_macro_model()
     return model, status
 end
 
-# Model creation function (copy from run_energy_macro.jl to avoid duplicate includes)
-function create_integrated_model()
+# Model creation function with configurable solver parameters
+function create_integrated_model(config::ModelConfig = default_config())
     model = Model(Ipopt.Optimizer)
-    set_optimizer_attribute(model, "print_level", 5)
-    set_optimizer_attribute(model, "max_iter", 3000)
-    set_optimizer_attribute(model, "tol", 1e-6)
+    set_optimizer_attribute(model, "print_level", config.solver_print_level)
+    set_optimizer_attribute(model, "max_iter", config.solver_max_iter)
+    set_optimizer_attribute(model, "tol", config.solver_tolerance)
     
     println("Creating integrated energy-macro model...")
     
@@ -100,7 +107,7 @@ function create_integrated_model()
         lifetime_ranges[(tech, y)] = valid_years
     end
     
-    discount_factors = Dict(y => (1 - discount_rate)^(period_length * (year_indices[y] - 1)) for y in year_all)
+    discount_factors = Dict(y => (1 - MODEL_CONFIG.discount_rate)^(MODEL_CONFIG.period_length * (year_indices[y] - 1)) for y in year_all)
     
     for y in year_all
         @constraint(model,
@@ -112,7 +119,7 @@ function create_integrated_model()
     end
     
     @constraint(model,
-        sum(COST_ANNUAL[y] * period_length * discount_factors[y] for y in year_all) == model[:TOTAL_COST]
+        sum(COST_ANNUAL[y] * MODEL_CONFIG.period_length * discount_factors[y] for y in year_all) == model[:TOTAL_COST]
     )
     
     # Set calibration and bounds
@@ -194,5 +201,9 @@ export enestart, eneprice, cost_MESSAGE, aeei_factor
 export newlab, udf, growth_factor, potential_gdp
 export demand_base, finite_time_corr
 export gdp_base, kgdp, ecst0, grow
+
+# Export configuration functions
+export ModelConfig, default_config, custom_config, update_model_config!
+export generate_year_sequence, calculate_derived_parameters
 
 end # module

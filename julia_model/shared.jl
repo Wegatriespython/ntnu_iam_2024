@@ -2,13 +2,14 @@
 # Set definitions, parameters and variables shared across models
 
 using JuMP
+include("model_config.jl")
 
 # SETS
 # Time periods (10 years per period) in FaIR
 t = 1:41
 
-# Periods in energy and macro models  
-year_all = [2020, 2030, 2040, 2050, 2060, 2070, 2080]
+# Periods in energy and macro models (generated from config)
+year_all = generate_year_sequence(default_config())
 
 # Energy Sectors for macro-economic analysis in MACRO
 sector = ["ELEC", "NELE"]

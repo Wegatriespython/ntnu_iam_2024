@@ -22,7 +22,7 @@ using EnergyMacroModel
     
     @test isa(model, Model)
     @test isa(bal, Dict)
-    @test isa(slack, Dict)
+    @test isa(slack, JuMP.Containers.DenseAxisArray)
     
     # Check that model has expected variables
     @test haskey(model.obj_dict, :ACT)
@@ -58,7 +58,7 @@ end
         @test isfinite(objective_value(model))
         
         # Check slack variables - should be minimal for base case
-        total_slack = sum(value(slack[(s, y)]) for s in sector for y in year_all)
+        total_slack = sum(value(slack[s, y]) for s in sector for y in year_all)
         @test total_slack < 1.0
         
         # Log the solution for debugging
@@ -68,7 +68,7 @@ end
         
         # Check individual slack values
         for s in sector, y in year_all
-            slack_val = value(slack[(s, y)])
+            slack_val = value(slack[s, y])
             if slack_val > 0.01  # Report significant slack
                 println("  Slack for $s in $y: $(round(slack_val, digits=3)) PWh")
             end
@@ -87,7 +87,7 @@ end
     @test status_high in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
     
     if status_high in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
-        total_slack_high = sum(value(slack_high[(s, y)]) for s in sector for y in year_all)
+        total_slack_high = sum(value(slack_high[s, y]) for s in sector for y in year_all)
         println("High demand case: objective = $(round(objective_value(model_high), digits=3)), slack = $(round(total_slack_high, digits=6))")
     end
     
@@ -101,7 +101,7 @@ end
     @test status_low in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
     
     if status_low in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
-        total_slack_low = sum(value(slack_low[(s, y)]) for s in sector for y in year_all)
+        total_slack_low = sum(value(slack_low[s, y]) for s in sector for y in year_all)
         @test total_slack_low < 0.001
         println("Low demand case: objective = $(round(objective_value(model_low), digits=3)), slack = $(round(total_slack_low, digits=6))")
     end
@@ -122,7 +122,7 @@ end
     status_extreme = termination_status(model_extreme)
     
     if status_extreme in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
-        total_slack_extreme = sum(value(slack_extreme[(s, y)]) for s in sector for y in year_all)
+        total_slack_extreme = sum(value(slack_extreme[s, y]) for s in sector for y in year_all)
         println("Extreme demand case solved with slack = $(round(total_slack_extreme, digits=3)) PWh")
         
         # With 100x demands, we expect significant slack usage
@@ -182,7 +182,7 @@ end
             if s_idx !== nothing
                 s = sector[s_idx]
                 dual_val = dual(constraint)
-                slack_val = value(slack[(s, y)])
+                slack_val = value(slack[s, y])
                 
                 println("  ($e, $l, $y) -> $s: dual = $(round(dual_val, digits=6)), slack = $(round(slack_val, digits=6))")
                 

@@ -24,7 +24,7 @@ using EnergyMacroModel
     if termination_status(sp) in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
         # Analyze variable magnitudes
         cost_val = value(sp[:TOTAL_COST])
-        slack_vals = [value(slack[(s, y)]) for s in sector, y in year_all]
+        slack_vals = [value(slack[s, y]) for s in sector, y in year_all]
         
         println("Energy subproblem variable scaling:")
         println("  TOTAL_COST: $(round(cost_val, digits=3)) billion USD")

@@ -166,7 +166,7 @@ end
     
     if termination_status(sp) in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
         # Check slack usage
-        total_slack = sum(value(slack[(s, y)]) for s in sector for y in year_all)
+        total_slack = sum(value(slack[s, y]) for s in sector for y in year_all)
         println("  Energy subproblem slack usage: $(round(total_slack, digits=6)) PWh")
         
         @test total_slack < 1.0
@@ -232,7 +232,7 @@ end
     
     status = termination_status(sp_extreme)
     if status in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
-        total_slack = sum(value(slack_extreme[(s, y)]) for s in sector for y in year_all)
+        total_slack = sum(value(slack_extreme[s, y]) for s in sector for y in year_all)
         println("  Extreme demands solved with slack: $(round(total_slack, digits=3)) PWh")
         @test total_slack > 100
     else
@@ -250,7 +250,7 @@ end
     @test termination_status(sp_low) in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
     
     if termination_status(sp_low) in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED]
-        total_slack_low = sum(value(slack_low[(s, y)]) for s in sector for y in year_all)
+        total_slack_low = sum(value(slack_low[s, y]) for s in sector for y in year_all)
         @test total_slack_low < 0.001
     end
 end
