@@ -118,25 +118,27 @@ function create_macro_model!(model)
         end
     end
     
-    # COST_ENERGY
-    # Energy system costs approximation based on MESSAGE model run (Taylor expansion)
-    for y in year_all
-        if y != 2020  # not base period
-            @constraint(model,
-                EC[y] == cost_MESSAGE[y] +
-                sum(eneprice[(s, y)] * (model[:PHYSENE][s, y] - enestart[(s, y)]) for s in sector) +
-                sum(eneprice[(s, y)] / enestart[(s, y)] * 
-                    (model[:PHYSENE][s, y] - enestart[(s, y)]) * (model[:PHYSENE][s, y] - enestart[(s, y)]) 
-                    for s in sector)
-            )
+    # COST_ENERGY / COST_ENERGY_LINKED
+    # Choose constraint based on whether we're in linked mode or standalone
+    if haskey(model, :COST_ANNUAL)
+        # COST_ENERGY_LINKED - Hard-linked version using actual energy system costs
+        for y in year_all
+            if y != 2020  # not base period
+                @constraint(model, EC[y] == model[:COST_ANNUAL][y] / 1000)
+            end
         end
-    end
-    
-    # COST_ENERGY_LINKED
-    # Hard-linked version using actual energy system costs
-    for y in year_all
-        if y != 2020  # not base period
-            @constraint(model, EC[y] == model[:COST_ANNUAL][y] / 1000)
+    else
+        # COST_ENERGY - Energy system costs approximation based on MESSAGE model run (Taylor expansion)
+        for y in year_all
+            if y != 2020  # not base period
+                @constraint(model,
+                    EC[y] == cost_MESSAGE[y] +
+                    sum(eneprice[(s, y)] * (model[:PHYSENE][s, y] - enestart[(s, y)]) for s in sector) +
+                    sum(eneprice[(s, y)] / enestart[(s, y)] * 
+                        (model[:PHYSENE][s, y] - enestart[(s, y)]) * (model[:PHYSENE][s, y] - enestart[(s, y)]) 
+                        for s in sector)
+                )
+            end
         end
     end
     
@@ -196,6 +198,32 @@ function set_macro_bounds_and_initial_values!(model)
         end
     end
     
+    # Set initial values for other variables based on steady-state growth
+    # These help CONOPT find a feasible solution
+    for y in year_all
+        if y == 2020
+            # Base year values will be fixed later
+            set_start_value(model[:Y][y], y0)
+            set_start_value(model[:K][y], k0)
+            set_start_value(model[:C][y], c0)
+            set_start_value(model[:I][y], i0)
+            set_start_value(model[:EC][y], y0 - i0 - c0)
+        else
+            # Use growth factors for future periods
+            set_start_value(model[:Y][y], y0 * growth_factor[y])
+            set_start_value(model[:K][y], k0 * growth_factor[y])
+            set_start_value(model[:C][y], c0 * growth_factor[y])
+            set_start_value(model[:I][y], i0 * growth_factor[y])
+            set_start_value(model[:EC][y], 0.0)  # Assuming zero energy costs initially
+            set_start_value(model[:YN][y], y0 * newlab[y])
+        end
+        
+        # Set PRODENE initial values
+        for s in sector
+            set_start_value(model[:PRODENE][s, y], enestart[(s, y)] / aeei_factor[(s, y)])
+        end
+    end
+    
     # Set lower bounds on variables to avoid singularities
     for y in year_all
         set_lower_bound(model[:K][y], lotol * k0)
@@ -221,7 +249,12 @@ function set_macro_bounds_and_initial_values!(model)
     fix(model[:K][2020], k0; force=true)
     fix(model[:C][2020], c0; force=true)
     fix(model[:I][2020], i0; force=true)
-    fix(model[:EC][2020], y0 - i0 - c0; force=true)
+    
+    # Only fix EC[2020] if we're not in standalone MACRO mode
+    # In standalone MACRO, EC is determined by the COST_ANNUAL variable
+    if !haskey(model, :COST_ANNUAL) || !is_fixed(model[:COST_ANNUAL][2020])
+        fix(model[:EC][2020], y0 - i0 - c0; force=true)
+    end
     
     for s in sector
         fix(model[:PRODENE][s, 2020], demand_base[s] / aeei_factor[(s, 2020)]; force=true)
