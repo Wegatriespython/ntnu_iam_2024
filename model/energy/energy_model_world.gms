@@ -345,14 +345,14 @@ PARAMETER cost(technology, year_all)                 'total technology costs on 
 * equation EQ_CAPACITY_BALANCE) which implies that capacity related costs are meansured in trillion $
 * (= $ / 1E3 W * 1E15 W = 1 E12 $) and thus to get to the same units as activity related costs (see below)
 * mutliplication by 1E3 is needed
-cost_capacity(technology, year_all) =  ((inv(technology, year_all) * ((1 + discount_rate)**(lifetime(technology)) * discount_rate) / ((1 + discount_rate)**(lifetime(technology)) - 1)
+cost_capacity(technology, year_all) =  ((inv(technology, year_all) * (discount_rate * (1 + discount_rate)**(lifetime(technology))) / ((1 + discount_rate)**(lifetime(technology)) - 1)
                          + fom(technology, year_all))) * 1000 $ (lifetime(technology) AND hours(technology)) ;
 
 * vom parameter is specified in $/MWh and demand (and therefore ACT) in PWh from follows that the
 * COST_ANNUAL and TOTAL_COST variables are measured in billion $ (= $/MWh * PWh = $ / (1E6 Wh) * 1E15 $ = 1E9 $)
 cost_activity(technology, year_all) =  vom(technology, year_all) ;
 
-cost(technology, year_all) =  ((inv(technology, year_all) * ((1 + discount_rate)**(lifetime(technology)) * discount_rate) / ((1 + discount_rate)**(lifetime(technology)) - 1)
+cost(technology, year_all) =  ((inv(technology, year_all) * (discount_rate * (1 + discount_rate)**(lifetime(technology))) / ((1 + discount_rate)**(lifetime(technology)) - 1)
                          + fom(technology, year_all)) / (hours(technology))) * 1000 $ (lifetime(technology) AND hours(technology))
                          + vom(technology, year_all) ;
 
@@ -432,7 +432,7 @@ EQ_COST_ANNUAL(year_all)..
 $OFFTEXT
 
 EQ_COST..
-    SUM(year_all, COST_ANNUAL(year_all) * period_length * (1 - discount_rate)**(period_length * (ORD(year_all) - 1)))
+    SUM(year_all, COST_ANNUAL(year_all) * period_length / (1 + discount_rate)**(period_length * (ORD(year_all) - 1)))
 =E= TOTAL_COST ;
 
 * definition of model (keyword 'all' means that all equations defined above are part of the model)

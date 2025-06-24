@@ -12,6 +12,7 @@ $include energy/energy_model_world.gms
 * ------------------------------------------------------------------------------
 
 OPTION LP = CPLEX ;
+energy_model.optfile = 1 ;
 
 SOLVE energy_model using LP minimize TOTAL_COST ;
 
