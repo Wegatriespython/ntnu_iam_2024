@@ -18,6 +18,8 @@ if !@isdefined(year_all)  # Check if shared.jl already loaded
     println("✓ loaded shared definitions");
     include("energy_model_world.jl");
     println("✓ loaded energy model");
+    include("energy_sub_problem.jl");
+    println("✓ loaded energy subproblem");
     include("macro_data_load.jl");
     println("✓ loaded macro data");
     include("macro_core.jl");
@@ -28,125 +30,8 @@ else
     println("✓ using existing module definitions");
 end
 
-# 1 Energy sub-problem (fixed service demands S_bar)
-function create_energy_subproblem(S_bar::Dict{Tuple{String,Int},Float64}, config::ModelConfig = default_config())
-  model = Model(Ipopt.Optimizer)
-  set_optimizer_attribute(model, "print_level", 0)
-  set_optimizer_attribute(model, "tol", config.solver_tolerance)
-  set_optimizer_attribute(model, "max_iter", config.solver_max_iter)
-
-  # decision variables
-  @variable(model, ACT[technology, year_all] >= 0)
-  @variable(model, CAP_NEW[technology, year_all] >= 0)
-  @variable(model, EMISS[year_all])
-  @variable(model, CUM_EMISS)
-  @variable(model, TOTAL_COST)                # **billion US$**
-  @variable(model, COST_ANNUAL[year_all])
-  @variable(model, demand_slack[sector, year_all] >= 0)
-
-  # bookkeeping for sector-split mapping
-  n_map = Dict(s => sum(haskey(map_energy_sector, (e, l, s)) for e in energy, l in level)
-               for s in sector)
-
-  # energy balance
-  bal = Dict{Tuple{String,String,Int},ConstraintRef}()
-  for e in energy, l in level, y in year_all
-    # Check if this energy-level combination is valid
-    if !haskey(energy_level, (e, l))
-      continue
-    end
-    
-    # Check if this maps to a sector (PHYSENE demand)
-    # Fixed: Properly identify PHYSENE commodities
-    if haskey(map_energy_sector, (e, l, "ELEC")) && haskey(S_bar, ("ELEC", y))
-      # This is electricity useful energy - use ELEC demand
-      bal[(e, l, y)] = @constraint(model,
-        sum(ACT[t, y] * (get(output, (t, e, l), 0) - get(input, (t, e, l), 0)) for t in technology)
-        >=
-        S_bar[("ELEC", y)])
-    elseif haskey(map_energy_sector, (e, l, "NELE")) && haskey(S_bar, ("NELE", y))
-      # This is non-electric useful energy - use NELE demand  
-      bal[(e, l, y)] = @constraint(model,
-        sum(ACT[t, y] * (get(output, (t, e, l), 0) - get(input, (t, e, l), 0)) for t in technology)
-        >=
-        S_bar[("NELE", y)])
-    elseif haskey(demand, (e, l))
-      # This has a standard demand (non-PHYSENE commodities)
-      bal[(e, l, y)] = @constraint(model,
-        sum(ACT[t, y] * (get(output, (t, e, l), 0) - get(input, (t, e, l), 0)) for t in technology)
-        >=
-        demand[(e, l)] * (gdp[y] / gdp[2020])^beta)
-    else
-      # No demand - net production must be zero (no free disposal)
-      bal[(e, l, y)] = @constraint(model,
-        sum(ACT[t, y] * (get(output, (t, e, l), 0) - get(input, (t, e, l), 0)) for t in technology)
-        ==
-        0)
-    end
-  end
-
-  # capacity & technical constraints
-  for t in technology, y in year_all
-    if haskey(hours, t) && haskey(lifetime, t)
-      idx = findfirst(==(y), year_all)
-      @constraint(model,
-        ACT[t, y] <= sum(CAP_NEW[t, year_all[i]] * hours[t]
-                        for i in 1:idx if (idx - i + 1) * period_length <= lifetime[t]))
-    end
-  end
-  for t in technology, y in year_all[2:end]
-    if !haskey(diffusion_up, t)
-      continue
-    end
-    y_prev = year_all[findfirst(==(y), year_all)-1]
-    @constraint(model, CAP_NEW[t, y] <= CAP_NEW[t, y_prev] * (1 + diffusion_up[t])^period_length + get(startup, t, 0))
-  end
-
-  # share constraints
-  for s in share, y in year_all
-    lhs = [t for t in technology if haskey(tec_share, (s, t))]
-    rhs = [t for t in technology if haskey(tec_share_rhs, (s, t))]
-    if haskey(share_up, s)
-      @constraint(model, sum(ACT[t, y] for t in lhs) <= share_up[s] * sum(ACT[t, y] for t in rhs))
-    end
-    if haskey(share_lo, s)
-      @constraint(model, sum(ACT[t, y] for t in lhs) >= share_lo[s] * sum(ACT[t, y] for t in rhs))
-    end
-  end
-
-  # emissions
-  @constraint(model, [y in year_all], sum(ACT[t, y] * get(CO2_emission, t, 0) for t in technology) == EMISS[y])
-  @constraint(model, sum(EMISS[y] * period_length for y in year_all) == CUM_EMISS)
-
-  # cost accounting
-  year_idx = Dict(y => i for (i, y) in enumerate(year_all))
-  lifetime_r = Dict{Tuple{String,Int},Vector{Int}}()
-  for t in technology, y in year_all
-    if !haskey(lifetime, t)
-      continue
-    end
-    idx, lt = year_idx[y], lifetime[t]
-    lifetime_r[(t, y)] = [y2 for y2 in year_all if year_idx[y2] <= idx && (idx - year_idx[y2] + 1) * period_length <= lt]
-  end
-  disc = Dict(y => (1 - drate)^(period_length * (year_idx[y] - 1)) for y in year_all)
-  @constraint(model, [y in year_all],
-    sum(ACT[t, y] * get(vom, (t, y), 0) for t in technology) +
-    sum(sum(CAP_NEW[t, y2] * get(cost_capacity, (t, y2), 0) for y2 in lifetime_r[(t, y)]) for t in keys(lifetime))
-    ==
-    COST_ANNUAL[y])
-  @constraint(model, sum(COST_ANNUAL[y] * period_length * disc[y] for y in year_all) == TOTAL_COST)
-
-  # historical calibration
-  for ((t, y), v) in energy_calibration
-    fix(ACT[t, y], v; force=true)
-  end
-  for ((t, y), v) in energy_calibration_lo
-    set_lower_bound(ACT[t, y], v)
-  end
-
-  @objective(model, Min, TOTAL_COST + 1e6 * sum(demand_slack))
-  return model, bal, demand_slack
-end
+# 1 Energy sub-problem (fixed service demands S_bar) - now uses external file
+# This function is a wrapper that calls the version in energy_sub_problem.jl
 
 # 2 Master problem (MACRO + theta)
 function create_master_problem()
@@ -296,8 +181,13 @@ function set_gbd_master_bounds_and_initial_values!(M::Model)
 end
 
 # 4 Main GBD loop
-function solve_gbd(maxit::Int=20, tol=1e-4)
+function solve_gbd(maxit::Int=20, tol=1e-4, config::Union{ModelConfig, Nothing} = nothing)
   println("\n" * "="^60 * "\nGBD algorithm\n" * "="^60)
+  
+  # Use default config if not provided
+  if config === nothing
+      config = @isdefined(default_config) ? default_config() : ModelConfig()
+  end
 
   S_curr = Dict((s, y) => enestart[(s, y)] for s in sector for y in year_all)
   cuts = BendersCut[]
@@ -314,7 +204,7 @@ function solve_gbd(maxit::Int=20, tol=1e-4)
     println("\n" * "-"^40 * "\nITERATION ", k)
 
     # sub-problem
-    sp, bal, _ = create_energy_subproblem(S_curr)
+    sp, bal, _ = create_energy_subproblem(S_curr, config)
     optimize!(sp)
     if termination_status(sp) ∉ (MOI.OPTIMAL, MOI.LOCALLY_SOLVED)
       error("energy sub-problem failed: " * string(termination_status(sp)))

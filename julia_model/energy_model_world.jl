@@ -170,37 +170,14 @@ diffusion_up = Dict(
     "bio_pot" => 0.05
 )
 
-# Maximum technology capacity constant addition per period
-# Maximum technology capacity constant addition per period
-# Set to small values or zero for most technologies
+# Maximum technology capacity constant addition per period (exact from GAMS lines 179-200)
 startup = Dict(
-    "coal_ppl" => 0.001,      # 1 GW
-    "gas_ppl" => 0.001,       # 1 GW
-    "oil_ppl" => 0.0001,      # 0.1 GW
-    "bio_ppl" => 0.0001,      # 0.1 GW
-    "hydro_ppl" => 0.001,     # 1 GW
-    "wind_ppl" => 0.001,      # 1 GW
-    "solar_PV_ppl" => 0.001,  # 1 GW
-    "nuclear_ppl" => 0.001,   # 1 GW
-    "other_ppl" => 0.0,       # No startup
-    # Extraction technologies shouldn't have startup capacity
-    "coal_extr" => 0.0,
-    "gas_extr" => 0.0,
-    "oil_extr" => 0.0,
-    "nuclear_fuel" => 0.0,
-    "bio_pot" => 0.0,
-    "hydro_pot" => 0.0,
-    "wind_pot" => 0.0,
-    "solar_pot" => 0.0,
-    # Non-electric and grid
-    "coal_nele" => 0.0,
-    "oil_nele" => 0.0,
-    "gas_nele" => 0.0,
-    "bio_nele" => 0.0,
-    "solar_nele" => 0.0,
-    "other_nele" => 0.0,
-    "electricity_grid" => 0.0,
-    "appliances" => 0.0
+    "coal_ppl" => 1, "gas_ppl" => 1, "oil_ppl" => 1, "bio_ppl" => 1,
+    "hydro_ppl" => 1, "wind_ppl" => 1, "solar_PV_ppl" => 1, "nuclear_ppl" => 1, "other_ppl" => 1,
+    "coal_nele" => 1, "oil_nele" => 1, "gas_nele" => 1, "bio_nele" => 1,
+    "solar_nele" => 1, "other_nele" => 1,
+    "coal_extr" => 1, "gas_extr" => 1, "oil_extr" => 1, "nuclear_fuel" => 1, "bio_pot" => 1,
+    "hydro_pot" => 1, "wind_pot" => 1, "solar_pot" => 1, "electricity_grid" => 1, "appliances" => 1
 )
 
 # Demand in base year [PWh]
@@ -227,9 +204,9 @@ beta = 0.7
 share_up = Dict("coal_nonelectric" => 0.4)
 share_lo = Dict("coal_nonelectric" => 0)
 
-# Investment cost [$/kW]
+# Investment cost [$/kW] (exact from GAMS table lines 229-240 - ONLY power plants have costs)
 inv = Dict(
-    # Power plants
+    # Power plants ONLY (exactly as in GAMS)
     ("coal_ppl", 2020) => 1500, ("coal_ppl", 2030) => 1500, ("coal_ppl", 2040) => 1500,
     ("coal_ppl", 2050) => 1500, ("coal_ppl", 2060) => 1500, ("coal_ppl", 2070) => 1500, ("coal_ppl", 2080) => 1500,
     ("gas_ppl", 2020) => 800, ("gas_ppl", 2030) => 800, ("gas_ppl", 2040) => 800,
@@ -247,54 +224,13 @@ inv = Dict(
     ("nuclear_ppl", 2020) => 6000, ("nuclear_ppl", 2030) => 6000, ("nuclear_ppl", 2040) => 6000,
     ("nuclear_ppl", 2050) => 6000, ("nuclear_ppl", 2060) => 6000, ("nuclear_ppl", 2070) => 6000, ("nuclear_ppl", 2080) => 6000,
     ("other_ppl", 2020) => 4000, ("other_ppl", 2030) => 4000, ("other_ppl", 2040) => 4000,
-    ("other_ppl", 2050) => 4000, ("other_ppl", 2060) => 4000, ("other_ppl", 2070) => 4000, ("other_ppl", 2080) => 4000,
-    
-    # Fossil fuel extraction technologies (mining/extraction infrastructure)
-    ("coal_extr", 2020) => 1000, ("coal_extr", 2030) => 1000, ("coal_extr", 2040) => 1000,
-    ("coal_extr", 2050) => 1000, ("coal_extr", 2060) => 1000, ("coal_extr", 2070) => 1000, ("coal_extr", 2080) => 1000,
-    ("gas_extr", 2020) => 500, ("gas_extr", 2030) => 500, ("gas_extr", 2040) => 500,
-    ("gas_extr", 2050) => 500, ("gas_extr", 2060) => 500, ("gas_extr", 2070) => 500, ("gas_extr", 2080) => 500,
-    ("oil_extr", 2020) => 800, ("oil_extr", 2030) => 800, ("oil_extr", 2040) => 800,
-    ("oil_extr", 2050) => 800, ("oil_extr", 2060) => 800, ("oil_extr", 2070) => 800, ("oil_extr", 2080) => 800,
-    
-    # Nuclear fuel processing
-    ("nuclear_fuel", 2020) => 2000, ("nuclear_fuel", 2030) => 2000, ("nuclear_fuel", 2040) => 2000,
-    ("nuclear_fuel", 2050) => 2000, ("nuclear_fuel", 2060) => 2000, ("nuclear_fuel", 2070) => 2000, ("nuclear_fuel", 2080) => 2000,
-    
-    # Renewable resource potentials (minimal infrastructure costs)
-    ("bio_pot", 2020) => 100, ("bio_pot", 2030) => 100, ("bio_pot", 2040) => 100,
-    ("bio_pot", 2050) => 100, ("bio_pot", 2060) => 100, ("bio_pot", 2070) => 100, ("bio_pot", 2080) => 100,
-    ("hydro_pot", 2020) => 50, ("hydro_pot", 2030) => 50, ("hydro_pot", 2040) => 50,
-    ("hydro_pot", 2050) => 50, ("hydro_pot", 2060) => 50, ("hydro_pot", 2070) => 50, ("hydro_pot", 2080) => 50,
-    ("wind_pot", 2020) => 50, ("wind_pot", 2030) => 50, ("wind_pot", 2040) => 50,
-    ("wind_pot", 2050) => 50, ("wind_pot", 2060) => 50, ("wind_pot", 2070) => 50, ("wind_pot", 2080) => 50,
-    ("solar_pot", 2020) => 50, ("solar_pot", 2030) => 50, ("solar_pot", 2040) => 50,
-    ("solar_pot", 2050) => 50, ("solar_pot", 2060) => 50, ("solar_pot", 2070) => 50, ("solar_pot", 2080) => 50,
-    
-    # Infrastructure
-    ("electricity_grid", 2020) => 300, ("electricity_grid", 2030) => 300, ("electricity_grid", 2040) => 300,
-    ("electricity_grid", 2050) => 300, ("electricity_grid", 2060) => 300, ("electricity_grid", 2070) => 300, ("electricity_grid", 2080) => 300,
-    ("appliances", 2020) => 200, ("appliances", 2030) => 200, ("appliances", 2040) => 200,
-    ("appliances", 2050) => 200, ("appliances", 2060) => 200, ("appliances", 2070) => 200, ("appliances", 2080) => 200,
-    
-    # Non-electric technologies
-    ("coal_nele", 2020) => 500, ("coal_nele", 2030) => 500, ("coal_nele", 2040) => 500,
-    ("coal_nele", 2050) => 500, ("coal_nele", 2060) => 500, ("coal_nele", 2070) => 500, ("coal_nele", 2080) => 500,
-    ("oil_nele", 2020) => 400, ("oil_nele", 2030) => 400, ("oil_nele", 2040) => 400,
-    ("oil_nele", 2050) => 400, ("oil_nele", 2060) => 400, ("oil_nele", 2070) => 400, ("oil_nele", 2080) => 400,
-    ("gas_nele", 2020) => 350, ("gas_nele", 2030) => 350, ("gas_nele", 2040) => 350,
-    ("gas_nele", 2050) => 350, ("gas_nele", 2060) => 350, ("gas_nele", 2070) => 350, ("gas_nele", 2080) => 350,
-    ("bio_nele", 2020) => 600, ("bio_nele", 2030) => 600, ("bio_nele", 2040) => 600,
-    ("bio_nele", 2050) => 600, ("bio_nele", 2060) => 600, ("bio_nele", 2070) => 600, ("bio_nele", 2080) => 600,
-    ("solar_nele", 2020) => 1500, ("solar_nele", 2030) => 1500, ("solar_nele", 2040) => 1500,
-    ("solar_nele", 2050) => 1500, ("solar_nele", 2060) => 1500, ("solar_nele", 2070) => 1500, ("solar_nele", 2080) => 1500,
-    ("other_nele", 2020) => 500, ("other_nele", 2030) => 500, ("other_nele", 2040) => 500,
-    ("other_nele", 2050) => 500, ("other_nele", 2060) => 500, ("other_nele", 2070) => 500, ("other_nele", 2080) => 500
+    ("other_ppl", 2050) => 4000, ("other_ppl", 2060) => 4000, ("other_ppl", 2070) => 4000, ("other_ppl", 2080) => 4000
+    # ALL OTHER TECHNOLOGIES HAVE ZERO INVESTMENT COSTS (as in GAMS)
 )
 
-# Fixed operation and maintenance cost [$/(kW/yr)]
+# Fixed operation and maintenance cost [$/(kW/yr)] (exact from GAMS table lines 243-254 - ONLY power plants have costs)
 fom = Dict(
-    # Power plants
+    # Power plants ONLY (exactly as in GAMS)
     ("coal_ppl", 2020) => 40, ("coal_ppl", 2030) => 40, ("coal_ppl", 2040) => 40,
     ("coal_ppl", 2050) => 40, ("coal_ppl", 2060) => 40, ("coal_ppl", 2070) => 40, ("coal_ppl", 2080) => 40,
     ("gas_ppl", 2020) => 25, ("gas_ppl", 2030) => 25, ("gas_ppl", 2040) => 25,
@@ -312,94 +248,26 @@ fom = Dict(
     ("nuclear_ppl", 2020) => 100, ("nuclear_ppl", 2030) => 100, ("nuclear_ppl", 2040) => 100,
     ("nuclear_ppl", 2050) => 100, ("nuclear_ppl", 2060) => 100, ("nuclear_ppl", 2070) => 100, ("nuclear_ppl", 2080) => 100,
     ("other_ppl", 2020) => 25, ("other_ppl", 2030) => 25, ("other_ppl", 2040) => 25,
-    ("other_ppl", 2050) => 25, ("other_ppl", 2060) => 25, ("other_ppl", 2070) => 25, ("other_ppl", 2080) => 25,
-    
-    # Fossil fuel extraction technologies (3-4% of investment cost)
-    ("coal_extr", 2020) => 30, ("coal_extr", 2030) => 30, ("coal_extr", 2040) => 30,
-    ("coal_extr", 2050) => 30, ("coal_extr", 2060) => 30, ("coal_extr", 2070) => 30, ("coal_extr", 2080) => 30,
-    ("gas_extr", 2020) => 20, ("gas_extr", 2030) => 20, ("gas_extr", 2040) => 20,
-    ("gas_extr", 2050) => 20, ("gas_extr", 2060) => 20, ("gas_extr", 2070) => 20, ("gas_extr", 2080) => 20,
-    ("oil_extr", 2020) => 25, ("oil_extr", 2030) => 25, ("oil_extr", 2040) => 25,
-    ("oil_extr", 2050) => 25, ("oil_extr", 2060) => 25, ("oil_extr", 2070) => 25, ("oil_extr", 2080) => 25,
-    
-    # Nuclear fuel processing (2% of investment cost)
-    ("nuclear_fuel", 2020) => 40, ("nuclear_fuel", 2030) => 40, ("nuclear_fuel", 2040) => 40,
-    ("nuclear_fuel", 2050) => 40, ("nuclear_fuel", 2060) => 40, ("nuclear_fuel", 2070) => 40, ("nuclear_fuel", 2080) => 40,
-    
-    # Renewable resource potentials (2% of investment cost)
-    ("bio_pot", 2020) => 2, ("bio_pot", 2030) => 2, ("bio_pot", 2040) => 2,
-    ("bio_pot", 2050) => 2, ("bio_pot", 2060) => 2, ("bio_pot", 2070) => 2, ("bio_pot", 2080) => 2,
-    ("hydro_pot", 2020) => 1, ("hydro_pot", 2030) => 1, ("hydro_pot", 2040) => 1,
-    ("hydro_pot", 2050) => 1, ("hydro_pot", 2060) => 1, ("hydro_pot", 2070) => 1, ("hydro_pot", 2080) => 1,
-    ("wind_pot", 2020) => 1, ("wind_pot", 2030) => 1, ("wind_pot", 2040) => 1,
-    ("wind_pot", 2050) => 1, ("wind_pot", 2060) => 1, ("wind_pot", 2070) => 1, ("wind_pot", 2080) => 1,
-    ("solar_pot", 2020) => 1, ("solar_pot", 2030) => 1, ("solar_pot", 2040) => 1,
-    ("solar_pot", 2050) => 1, ("solar_pot", 2060) => 1, ("solar_pot", 2070) => 1, ("solar_pot", 2080) => 1,
-    
-    # Infrastructure (2.5% of investment cost)
-    ("electricity_grid", 2020) => 8, ("electricity_grid", 2030) => 8, ("electricity_grid", 2040) => 8,
-    ("electricity_grid", 2050) => 8, ("electricity_grid", 2060) => 8, ("electricity_grid", 2070) => 8, ("electricity_grid", 2080) => 8,
-    ("appliances", 2020) => 5, ("appliances", 2030) => 5, ("appliances", 2040) => 5,
-    ("appliances", 2050) => 5, ("appliances", 2060) => 5, ("appliances", 2070) => 5, ("appliances", 2080) => 5,
-    
-    # Non-electric technologies (3% of investment cost)
-    ("coal_nele", 2020) => 15, ("coal_nele", 2030) => 15, ("coal_nele", 2040) => 15,
-    ("coal_nele", 2050) => 15, ("coal_nele", 2060) => 15, ("coal_nele", 2070) => 15, ("coal_nele", 2080) => 15,
-    ("oil_nele", 2020) => 12, ("oil_nele", 2030) => 12, ("oil_nele", 2040) => 12,
-    ("oil_nele", 2050) => 12, ("oil_nele", 2060) => 12, ("oil_nele", 2070) => 12, ("oil_nele", 2080) => 12,
-    ("gas_nele", 2020) => 10, ("gas_nele", 2030) => 10, ("gas_nele", 2040) => 10,
-    ("gas_nele", 2050) => 10, ("gas_nele", 2060) => 10, ("gas_nele", 2070) => 10, ("gas_nele", 2080) => 10,
-    ("bio_nele", 2020) => 18, ("bio_nele", 2030) => 18, ("bio_nele", 2040) => 18,
-    ("bio_nele", 2050) => 18, ("bio_nele", 2060) => 18, ("bio_nele", 2070) => 18, ("bio_nele", 2080) => 18,
-    ("solar_nele", 2020) => 45, ("solar_nele", 2030) => 45, ("solar_nele", 2040) => 45,
-    ("solar_nele", 2050) => 45, ("solar_nele", 2060) => 45, ("solar_nele", 2070) => 45, ("solar_nele", 2080) => 45,
-    ("other_nele", 2020) => 15, ("other_nele", 2030) => 15, ("other_nele", 2040) => 15,
-    ("other_nele", 2050) => 15, ("other_nele", 2060) => 15, ("other_nele", 2070) => 15, ("other_nele", 2080) => 15
+    ("other_ppl", 2050) => 25, ("other_ppl", 2060) => 25, ("other_ppl", 2070) => 25, ("other_ppl", 2080) => 25
+    # ALL OTHER TECHNOLOGIES HAVE ZERO FIXED O&M COSTS (as in GAMS)
 )
 
-# Variable cost [$/MWh]
-vom = Dict(
-    ("coal_ppl", 2020) => 0.0, ("coal_ppl", 2030) => 0.0, ("coal_ppl", 2040) => 0.0,
-    ("coal_ppl", 2050) => 0.0, ("coal_ppl", 2060) => 0.0, ("coal_ppl", 2070) => 0.0, ("coal_ppl", 2080) => 0.0,
-    ("gas_ppl", 2020) => 0.0, ("gas_ppl", 2030) => 0.0, ("gas_ppl", 2040) => 0.0,
-    ("gas_ppl", 2050) => 0.0, ("gas_ppl", 2060) => 0.0, ("gas_ppl", 2070) => 0.0, ("gas_ppl", 2080) => 0.0,
-    ("oil_ppl", 2020) => 0.0, ("oil_ppl", 2030) => 0.0, ("oil_ppl", 2040) => 0.0,
-    ("oil_ppl", 2050) => 0.0, ("oil_ppl", 2060) => 0.0, ("oil_ppl", 2070) => 0.0, ("oil_ppl", 2080) => 0.0,
-    ("bio_ppl", 2020) => 0.0, ("bio_ppl", 2030) => 0.0, ("bio_ppl", 2040) => 0.0,
-    ("bio_ppl", 2050) => 0.0, ("bio_ppl", 2060) => 0.0, ("bio_ppl", 2070) => 0.0, ("bio_ppl", 2080) => 0.0,
-    ("nuclear_ppl", 2020) => 0.0, ("nuclear_ppl", 2030) => 0.0, ("nuclear_ppl", 2040) => 0.0,
-    ("nuclear_ppl", 2050) => 0.0, ("nuclear_ppl", 2060) => 0.0, ("nuclear_ppl", 2070) => 0.0, ("nuclear_ppl", 2080) => 0.0,
-    ("electricity_grid", 2020) => 47.8, ("electricity_grid", 2030) => 47.8, ("electricity_grid", 2040) => 47.8,
-    ("electricity_grid", 2050) => 47.8, ("electricity_grid", 2060) => 47.8, ("electricity_grid", 2070) => 47.8, ("electricity_grid", 2080) => 47.8,
-    ("coal_nele", 2020) => 25.0, ("coal_nele", 2030) => 27.0, ("coal_nele", 2040) => 29.0,
-    ("coal_nele", 2050) => 31.0, ("coal_nele", 2060) => 33.0, ("coal_nele", 2070) => 35.0, ("coal_nele", 2080) => 37.0,
-    ("gas_nele", 2020) => 35.0, ("gas_nele", 2030) => 37.0, ("gas_nele", 2040) => 39.0,
-    ("gas_nele", 2050) => 41.0, ("gas_nele", 2060) => 43.0, ("gas_nele", 2070) => 45.0, ("gas_nele", 2080) => 47.0,
-    ("oil_nele", 2020) => 55.0, ("oil_nele", 2030) => 58.0, ("oil_nele", 2040) => 61.0,
-    ("oil_nele", 2050) => 64.0, ("oil_nele", 2060) => 67.0, ("oil_nele", 2070) => 70.0, ("oil_nele", 2080) => 73.0,
-    ("bio_nele", 2020) => 20.0, ("bio_nele", 2030) => 21.0, ("bio_nele", 2040) => 22.0,
-    ("bio_nele", 2050) => 23.0, ("bio_nele", 2060) => 24.0, ("bio_nele", 2070) => 25.0, ("bio_nele", 2080) => 26.0,
-    ("solar_nele", 2020) => 5.0, ("solar_nele", 2030) => 4.0, ("solar_nele", 2040) => 3.0,
-    ("solar_nele", 2050) => 2.0, ("solar_nele", 2060) => 1.5, ("solar_nele", 2070) => 1.0, ("solar_nele", 2080) => 0.5,
-    ("other_nele", 2020) => 30.0, ("other_nele", 2030) => 32.0, ("other_nele", 2040) => 34.0,
-    ("other_nele", 2050) => 36.0, ("other_nele", 2060) => 38.0, ("other_nele", 2070) => 40.0, ("other_nele", 2080) => 42.0,
-    ("coal_extr", 2020) => 7.2, ("coal_extr", 2030) => 7.2, ("coal_extr", 2040) => 7.2,
-    ("coal_extr", 2050) => 7.2, ("coal_extr", 2060) => 7.2, ("coal_extr", 2070) => 7.2, ("coal_extr", 2080) => 7.2,
-    ("gas_extr", 2020) => 14.4, ("gas_extr", 2030) => 14.4, ("gas_extr", 2040) => 14.4,
-    ("gas_extr", 2050) => 14.4, ("gas_extr", 2060) => 14.4, ("gas_extr", 2070) => 14.4, ("gas_extr", 2080) => 14.4,
-    ("oil_extr", 2020) => 40.0, ("oil_extr", 2030) => 40.0, ("oil_extr", 2040) => 40.0,
-    ("oil_extr", 2050) => 40.0, ("oil_extr", 2060) => 40.0, ("oil_extr", 2070) => 40.0, ("oil_extr", 2080) => 40.0,
-    ("nuclear_fuel", 2020) => 10.0, ("nuclear_fuel", 2030) => 10.0, ("nuclear_fuel", 2040) => 10.0,
-    ("nuclear_fuel", 2050) => 10.0, ("nuclear_fuel", 2060) => 10.0, ("nuclear_fuel", 2070) => 10.0, ("nuclear_fuel", 2080) => 10.0,
-    ("bio_pot", 2020) => 18.0, ("bio_pot", 2030) => 18.0, ("bio_pot", 2040) => 18.0,
-    ("bio_pot", 2050) => 18.0, ("bio_pot", 2060) => 18.0, ("bio_pot", 2070) => 18.0, ("bio_pot", 2080) => 18.0,
-    ("hydro_pot", 2020) => 0.0, ("hydro_pot", 2030) => 0.0, ("hydro_pot", 2040) => 0.0,
-    ("hydro_pot", 2050) => 0.0, ("hydro_pot", 2060) => 0.0, ("hydro_pot", 2070) => 0.0, ("hydro_pot", 2080) => 0.0,
-    ("wind_pot", 2020) => 0.0, ("wind_pot", 2030) => 0.0, ("wind_pot", 2040) => 0.0,
-    ("wind_pot", 2050) => 0.0, ("wind_pot", 2060) => 0.0, ("wind_pot", 2070) => 0.0, ("wind_pot", 2080) => 0.0,
-    ("solar_pot", 2020) => 0.0, ("solar_pot", 2030) => 0.0, ("solar_pot", 2040) => 0.0,
-    ("solar_pot", 2050) => 0.0, ("solar_pot", 2060) => 0.0, ("solar_pot", 2070) => 0.0, ("solar_pot", 2080) => 0.0
-)
+# Variable cost [$/MWh] (exact from GAMS table lines 257-279)
+vom = Dict()
+# Initialize all to zero first
+for tech in technology, year in year_all
+    vom[(tech, year)] = 0.0
+end
+# Set non-zero values exactly as in GAMS
+for year in year_all
+    vom[("electricity_grid", year)] = 47.8
+    vom[("coal_extr", year)] = 7.2
+    vom[("gas_extr", year)] = 14.4
+    vom[("oil_extr", year)] = 40.0
+    vom[("nuclear_fuel", year)] = 10.0
+    vom[("bio_pot", year)] = 18.0
+    # All other technologies have 0.0 VOM costs (as in GAMS)
+end
 
 # Technical lifetime
 lifetime = Dict(
@@ -447,8 +315,8 @@ function calculate_costs()
     for tech in valid_techs, year in year_all
         # Capacity-related costs (annuity of investment + FOM) in $/kW
         if haskey(inv, (tech, year)) && haskey(fom, (tech, year))
-            # Fix: cost_capacity should be in $/kW-year, not $/W-year
-            cost_capacity[(tech, year)] = inv[(tech, year)] * annuity_factors[tech] + fom[(tech, year)]
+            # GAMS multiplies by 1000 (line 348-349) for unit conversion
+            cost_capacity[(tech, year)] = (inv[(tech, year)] * annuity_factors[tech] + fom[(tech, year)]) * 1000
         end
         
         # Activity-related costs in $/MWh
