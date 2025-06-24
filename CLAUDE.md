@@ -14,10 +14,11 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 
 ### Key Files
 - `julia_model/src/EnergyMacroModel.jl`: Module definition and exports
-- `julia_model/shared.jl`: Common sets and parameters
-- `julia_model/energy_model_world.jl`: Energy system model formulation
+- `julia_model/shared.jl`: Common sets, parameters, and shared variable creation function
+- `julia_model/energy_model_world.jl`: Energy system model formulation (handles both standalone and integrated modes)
 - `julia_model/macro_core.jl`: MACRO model implementation
 - `julia_model/macro_data_load.jl`: Economic parameters and data
+- `julia_model/run_energy_macro.jl`: Integrated energy-macro model runner
 - `julia_model/run_energy_macro_gbd.jl`: GBD algorithm implementation
 
 ### Test Infrastructure
@@ -72,6 +73,11 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 - Energy subproblem infeasibility (24/30 tests failing)
 - GBD algorithm convergence problems
 - Numerical stability concerns in specific parameter ranges
+
+### Recent Fixes
+- Fixed duplicate COST_ANNUAL variable definition by creating shared variables function in shared.jl
+- Energy-macro integrated model now runs successfully with optimal utility value of 179.50
+- Results match GAMS model output for all macro variables (GDP, C, I) and utility
 
 ### Development Infrastructure
 - Git version control with systematic staging and commits
@@ -145,3 +151,7 @@ julia_model/
 ├── gbd_verification_report.json     # Verification results
 └── Project.toml                     # Package configuration
 ```
+
+## Command Line Memories
+
+- `julia --project=@. filename.jl`: Run Julia script using the project's dependencies and environment

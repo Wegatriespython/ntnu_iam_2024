@@ -343,7 +343,14 @@ function create_energy_model!(model)
     @variable(model, EMISS[year_all])  # CO2 emissions
     @variable(model, CUM_EMISS)  # cumulative CO2 emissions
     @variable(model, TOTAL_COST)  # total discounted systems costs
-    @variable(model, COST_ANNUAL[year_all])  # costs per year
+    
+    # COST_ANNUAL might already be defined as a shared variable
+    if !haskey(object_dictionary(model), :COST_ANNUAL)
+        @variable(model, COST_ANNUAL[year_all])  # costs per year
+    end
+    
+    # Get references to variables for use in constraints
+    COST_ANNUAL = model[:COST_ANNUAL]
     
     # Energy balance equations (exact from GAMS lines 396-398)
     for e in energy, l in level, y in year_all

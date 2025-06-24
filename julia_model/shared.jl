@@ -14,10 +14,13 @@ year_all = generate_year_sequence(default_config())
 # Energy Sectors for macro-economic analysis in MACRO
 sector = ["ELEC", "NELE"]
 
-# POSITIVE VARIABLES
-# Will be defined in JuMP model as:
-# @variable(model, PHYSENE[sector, year_all] >= 0)  # Physical end-use service or commodity use
-
-# VARIABLES  
-# Will be defined in JuMP model as:
-# @variable(model, COST_ANNUAL[year_all])  # costs per year_all
+# Function to create shared variables in a JuMP model
+function create_shared_variables!(model::Model)
+    # POSITIVE VARIABLES
+    @variable(model, PHYSENE[sector, year_all] >= 0)  # Physical end-use service or commodity use
+    
+    # VARIABLES  
+    @variable(model, COST_ANNUAL[year_all])  # costs per year_all
+    
+    return model
+end

@@ -15,8 +15,6 @@ include("energy/energy_model_world.jl")
 model = Model(GAMS.Optimizer)
 
 set_optimizer_attribute(model, "LP", "CPLEX")
-set_optimizer_attribute(model, "OptFile", 1)
-set_optimizer_attribute(model, GAMS.Solver(), "CPLEX")
 
 # Create the energy model with all constraints and objective
 create_energy_model!(model)
@@ -27,9 +25,6 @@ create_energy_model!(model)
 
 println("Model variables: $(num_variables(model))")
 println("Model constraints: $(num_constraints(model; count_variable_in_set_constraints=false))")
-
-write_to_file(model, "julia_energy_model.mps")
-println("MPS file written to julia_energy_model.mps")
 
 optimize!(model)
 
