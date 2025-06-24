@@ -68,7 +68,7 @@ function create_integrated_model()
         lifetime_ranges[(tech, y)] = valid_years
     end
     
-    # Pre-compute discount factors
+    # Pre-compute discount factors (matching GAMS formula)
     discount_factors = Dict(y => (1 - discount_rate)^(period_length * (year_indices[y] - 1)) for y in year_all)
     
     # EQ_COST_ANNUAL - costs per year (optimized)
