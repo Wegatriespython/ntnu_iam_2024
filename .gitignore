@@ -5,5 +5,6 @@
 *.lxi
 *.gsp
 *.gpr
-
+*.csv
 *.gdx
+*julia_model/sensitivity/data

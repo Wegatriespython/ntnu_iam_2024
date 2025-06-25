@@ -1,0 +1,549 @@
+# Energy Model Parameters Configuration
+# This file contains all parameter values for the energy model
+
+# Model configuration
+model:
+  period_length: 10
+  discount_rate: 0.05
+  beta: 0.7  # elasticity parameter for demand growth
+
+# Sets and indices
+sets:
+  technology:
+    - coal_extr         # coal extraction
+    - gas_extr          # natural gas extraction
+    - oil_extr          # crude oil extraction
+    - nuclear_fuel      # nuclear fuel for light water reactors
+    - bio_pot           # bioenergy potential
+    - hydro_pot         # hydropower potential
+    - wind_pot          # wind potential
+    - solar_pot         # solar energy potential
+    - coal_ppl          # coal power plant
+    - gas_ppl           # natural gas combined cycle power plant
+    - oil_ppl           # fuel oil power plant
+    - bio_ppl           # biomass power plant
+    - hydro_ppl         # hydroelectric power plant
+    - wind_ppl          # wind turbine
+    - solar_PV_ppl      # solar photovoltaics power plant
+    - nuclear_ppl       # nuclear power plant
+    - other_ppl         # other power plants
+    - coal_nele         # non-electric coal
+    - oil_nele          # non-electric oil
+    - gas_nele          # non-electric gas
+    - bio_nele          # non-electric biomass
+    - solar_nele        # non-electric solar
+    - other_nele        # non-electric other
+    - electricity_grid  # electricity grid
+    - appliances        # electric appliances
+
+  energy:
+    - coal
+    - gas
+    - oil
+    - biomass
+    - nuclear
+    - hydro
+    - wind
+    - solar
+    - electricity
+    - nonelectric
+
+  level:
+    - primary
+    - secondary
+    - final
+    - useful
+
+  share:
+    - coal_nonelectric
+
+# Energy-level combinations
+energy_level:
+  - [hydro, primary]
+  - [wind, primary]
+  - [nuclear, primary]
+  - [coal, final]
+  - [oil, final]
+  - [gas, final]
+  - [biomass, final]
+  - [solar, final]
+  - [electricity, secondary]
+  - [electricity, final]
+  - [electricity, useful]
+  - [nonelectric, useful]
+
+# Technology share mappings
+tec_share:
+  - [coal_nonelectric, coal_nele]
+
+tec_share_rhs:
+  - [coal_nonelectric, coal_nele]
+  - [coal_nonelectric, gas_nele]
+  - [coal_nonelectric, oil_nele]
+  - [coal_nonelectric, bio_nele]
+  - [coal_nonelectric, solar_nele]
+  - [coal_nonelectric, other_nele]
+
+# Energy-sector mapping
+map_energy_sector:
+  - [electricity, useful, ELEC]
+  - [nonelectric, useful, NELE]
+
+# Input coefficients
+input:
+  electricity_grid:
+    electricity:
+      secondary: 1
+  appliances:
+    electricity:
+      final: 1
+  coal_ppl:
+    coal:
+      final: 2.9
+  gas_ppl:
+    gas:
+      final: 2.3
+  oil_ppl:
+    oil:
+      final: 2.88
+  bio_ppl:
+    biomass:
+      final: 3.59
+  nuclear_ppl:
+    nuclear:
+      primary: 1
+  hydro_ppl:
+    hydro:
+      primary: 1
+  wind_ppl:
+    wind:
+      primary: 1
+  solar_PV_ppl:
+    solar:
+      final: 1
+  coal_nele:
+    coal:
+      final: 1
+  oil_nele:
+    oil:
+      final: 1
+  gas_nele:
+    gas:
+      final: 1
+  bio_nele:
+    biomass:
+      final: 1
+  solar_nele:
+    solar:
+      final: 1
+
+# Output coefficients
+output:
+  electricity_grid:
+    electricity:
+      final: 0.842
+  appliances:
+    electricity:
+      useful: 1
+  coal_ppl:
+    electricity:
+      secondary: 1
+  gas_ppl:
+    electricity:
+      secondary: 1
+  oil_ppl:
+    electricity:
+      secondary: 1
+  bio_ppl:
+    electricity:
+      secondary: 1
+  hydro_ppl:
+    electricity:
+      secondary: 1
+  wind_ppl:
+    electricity:
+      secondary: 1
+  solar_PV_ppl:
+    electricity:
+      final: 1
+  nuclear_ppl:
+    electricity:
+      secondary: 1
+  other_ppl:
+    electricity:
+      secondary: 1
+  coal_nele:
+    nonelectric:
+      useful: 1
+  oil_nele:
+    nonelectric:
+      useful: 1
+  gas_nele:
+    nonelectric:
+      useful: 1
+  bio_nele:
+    nonelectric:
+      useful: 1
+  solar_nele:
+    nonelectric:
+      useful: 1
+  other_nele:
+    nonelectric:
+      useful: 1
+  coal_extr:
+    coal:
+      final: 1
+  gas_extr:
+    gas:
+      final: 1
+  oil_extr:
+    oil:
+      final: 1
+  nuclear_fuel:
+    nuclear:
+      primary: 1
+  bio_pot:
+    biomass:
+      final: 1
+  hydro_pot:
+    hydro:
+      primary: 1
+  wind_pot:
+    wind:
+      primary: 1
+  solar_pot:
+    solar:
+      final: 1
+
+# CO2 emission coefficients [tCO2/MWh]
+CO2_emission:
+  gas_ppl: 0.367
+  coal_ppl: 0.854
+  oil_ppl: 0.57
+  coal_nele: 0.342
+  oil_nele: 0.202
+  gas_nele: 0.26
+
+# Maximum annual technology capacity growth rate
+diffusion_up:
+  coal_ppl: 0.075
+  gas_ppl: 0.10
+  oil_ppl: 0.075
+  bio_ppl: 0.075
+  hydro_ppl: 0.05
+  wind_ppl: 0.10
+  solar_PV_ppl: 0.15
+  nuclear_ppl: 0.05
+  other_ppl: 0.075
+  coal_nele: 0.075
+  oil_nele: 0.075
+  gas_nele: 0.10
+  bio_nele: 0.075
+  solar_nele: 0.15
+  other_nele: 0.075
+  coal_extr: 0.05
+  gas_extr: 0.05
+  oil_extr: 0.05
+  nuclear_fuel: 0.05
+  bio_pot: 0.05
+
+# Maximum technology capacity constant addition per period
+startup:
+  coal_ppl: 1
+  gas_ppl: 1
+  oil_ppl: 1
+  bio_ppl: 1
+  hydro_ppl: 1
+  wind_ppl: 1
+  solar_PV_ppl: 1
+  nuclear_ppl: 1
+  other_ppl: 1
+  coal_nele: 1
+  oil_nele: 1
+  gas_nele: 1
+  bio_nele: 1
+  solar_nele: 1
+  other_nele: 1
+  coal_extr: 1
+  gas_extr: 1
+  oil_extr: 1
+  nuclear_fuel: 1
+  bio_pot: 1
+  hydro_pot: 1
+  wind_pot: 1
+  solar_pot: 1
+  electricity_grid: 1
+  appliances: 1
+
+# Demand in base year [PWh]
+demand:
+  electricity:
+    useful: 22.60
+  nonelectric:
+    useful: 87.3
+
+# GDP [index]
+gdp:
+  "2020": 1
+  "2030": 1.2
+  "2040": 1.4
+  "2050": 1.7
+  "2060": 2.0
+  "2070": 2.4
+  "2080": 2.9
+
+# Share constraints
+share_up:
+  coal_nonelectric: 0.4
+
+share_lo:
+  coal_nonelectric: 0
+
+# Investment cost [$/kW] - Only power plants have costs
+inv:
+  coal_ppl:
+    "2020": 1500
+    "2030": 1500
+    "2040": 1500
+    "2050": 1500
+    "2060": 1500
+    "2070": 1500
+    "2080": 1500
+  gas_ppl:
+    "2020": 800
+    "2030": 800
+    "2040": 800
+    "2050": 800
+    "2060": 800
+    "2070": 800
+    "2080": 800
+  oil_ppl:
+    "2020": 950
+    "2030": 950
+    "2040": 950
+    "2050": 950
+    "2060": 950
+    "2070": 950
+    "2080": 950
+  hydro_ppl:
+    "2020": 3000
+    "2030": 3000
+    "2040": 3000
+    "2050": 3000
+    "2060": 3000
+    "2070": 3000
+    "2080": 3000
+  bio_ppl:
+    "2020": 1600
+    "2030": 1600
+    "2040": 1600
+    "2050": 1600
+    "2060": 1600
+    "2070": 1600
+    "2080": 1600
+  wind_ppl:
+    "2020": 1000
+    "2030": 1000
+    "2040": 1000
+    "2050": 1000
+    "2060": 1000
+    "2070": 1000
+    "2080": 1000
+  solar_PV_ppl:
+    "2020": 4000
+    "2030": 4000
+    "2040": 4000
+    "2050": 4000
+    "2060": 4000
+    "2070": 4000
+    "2080": 4000
+  nuclear_ppl:
+    "2020": 6000
+    "2030": 6000
+    "2040": 6000
+    "2050": 6000
+    "2060": 6000
+    "2070": 6000
+    "2080": 6000
+  other_ppl:
+    "2020": 4000
+    "2030": 4000
+    "2040": 4000
+    "2050": 4000
+    "2060": 4000
+    "2070": 4000
+    "2080": 4000
+
+# Fixed operation and maintenance cost [$/(kW/yr)] - Only power plants have costs
+fom:
+  coal_ppl:
+    "2020": 40
+    "2030": 40
+    "2040": 40
+    "2050": 40
+    "2060": 40
+    "2070": 40
+    "2080": 40
+  gas_ppl:
+    "2020": 25
+    "2030": 25
+    "2040": 25
+    "2050": 25
+    "2060": 25
+    "2070": 25
+    "2080": 25
+  oil_ppl:
+    "2020": 25
+    "2030": 25
+    "2040": 25
+    "2050": 25
+    "2060": 25
+    "2070": 25
+    "2080": 25
+  bio_ppl:
+    "2020": 60
+    "2030": 60
+    "2040": 60
+    "2050": 60
+    "2060": 60
+    "2070": 60
+    "2080": 60
+  hydro_ppl:
+    "2020": 30
+    "2030": 30
+    "2040": 30
+    "2050": 30
+    "2060": 30
+    "2070": 30
+    "2080": 30
+  wind_ppl:
+    "2020": 40
+    "2030": 40
+    "2040": 40
+    "2050": 40
+    "2060": 40
+    "2070": 20
+    "2080": 20
+  solar_PV_ppl:
+    "2020": 25
+    "2030": 25
+    "2040": 25
+    "2050": 25
+    "2060": 25
+    "2070": 25
+    "2080": 25
+  nuclear_ppl:
+    "2020": 100
+    "2030": 100
+    "2040": 100
+    "2050": 100
+    "2060": 100
+    "2070": 100
+    "2080": 100
+  other_ppl:
+    "2020": 25
+    "2030": 25
+    "2040": 25
+    "2050": 25
+    "2060": 25
+    "2070": 25
+    "2080": 25
+
+# Variable cost [$/MWh] - Most technologies have zero cost
+vom:
+  electricity_grid: 47.8  # Same for all years
+  coal_extr: 7.2
+  gas_extr: 14.4
+  oil_extr: 40.0
+  nuclear_fuel: 10.0
+  bio_pot: 18.0
+  # All other technologies have 0.0 VOM costs
+
+# Technical lifetime
+lifetime:
+  coal_extr: 30
+  gas_extr: 30
+  oil_extr: 30
+  nuclear_fuel: 40
+  bio_pot: 20
+  hydro_pot: 80
+  wind_pot: 20
+  solar_pot: 20
+  coal_ppl: 30
+  gas_ppl: 20
+  oil_ppl: 20
+  bio_ppl: 20
+  hydro_ppl: 80
+  wind_ppl: 20
+  solar_PV_ppl: 20
+  nuclear_ppl: 40
+  other_ppl: 20
+  coal_nele: 20
+  oil_nele: 20
+  gas_nele: 20
+  bio_nele: 20
+  solar_nele: 20
+  other_nele: 20
+  electricity_grid: 40
+  appliances: 15
+
+# Full load hours
+hours:
+  coal_extr: 7000
+  gas_extr: 7000
+  oil_extr: 7000
+  nuclear_fuel: 7000
+  bio_pot: 7000
+  hydro_pot: 4500
+  wind_pot: 2000
+  solar_pot: 1200
+  coal_ppl: 7000
+  gas_ppl: 6000
+  oil_ppl: 6000
+  bio_ppl: 6000
+  hydro_ppl: 4500
+  wind_ppl: 2000
+  solar_PV_ppl: 1200
+  nuclear_ppl: 7500
+  other_ppl: 4000
+  coal_nele: 7000
+  oil_nele: 7000
+  gas_nele: 7000
+  bio_nele: 7000
+  solar_nele: 7000
+  other_nele: 7000
+  electricity_grid: 8760
+  appliances: 8760
+
+# Model calibration - historical values for 2020
+energy_calibration:
+  coal_ppl:
+    "2020": 9.462
+  oil_ppl:
+    "2020": 0.7
+  solar_PV_ppl:
+    "2020": 0.839
+  gas_ppl:
+    "2020": 6.36
+  nuclear_ppl:
+    "2020": 2.68
+  hydro_ppl:
+    "2020": 4.36
+  wind_ppl:
+    "2020": 1.6
+  bio_ppl:
+    "2020": 0.69
+  coal_nele:
+    "2020": 10.7
+  oil_nele:
+    "2020": 43.0
+  gas_nele:
+    "2020": 18.7
+  bio_nele:
+    "2020": 10.6
+
+energy_calibration_lo:
+  other_ppl:
+    "2020": 0.127
+  other_nele:
+    "2020": 0.28
