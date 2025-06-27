@@ -2,7 +2,7 @@
 # Integrating energy systems model and macro-economic model
 
 using JuMP
-using Ipopt
+using GAMS
 using LinearAlgebra
 
 
@@ -23,12 +23,10 @@ include("macro/macro_presolve.jl")
 
 function create_integrated_model()
   # Create the main optimization model
-  model = Model(Ipopt.Optimizer)
+  model = Model(GAMS.Optimizer)
 
   # Set solver options
-  set_optimizer_attribute(model, "print_level", 5)
-  set_optimizer_attribute(model, "max_iter", 3000)
-  set_optimizer_attribute(model, "tol", 1e-6)
+  set_optimizer_attribute(model, "NLP", "CONOPT")
 
   println("Creating integrated energy-macro model...")
 
