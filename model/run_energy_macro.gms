@@ -16,7 +16,7 @@ $INCLUDE macro/macro_presolve.gms
 * ------------------------------------------------------------------------------
 
 MODEL energy_macro /
-    EQ_ENERGY_BALANCE
+    EQ_ENERGY_BALANCE_LINKED
     EQ_CAPACITY_BALANCE
     EQ_EMISSION
     EQ_EMISSION_CUMULATIVE

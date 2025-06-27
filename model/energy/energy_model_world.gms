@@ -376,6 +376,7 @@ VARIABLES
 
 EQUATIONS
     EQ_ENERGY_BALANCE          'supply > demand equation for energy carrier and level combination'
+    EQ_ENERGY_BALANCE_LINKED   'supply > demand equation using PHYSENE for integrated model'
     EQ_CAPACITY_BALANCE        'capacity equation for technologies'
     EQ_EMISSION                'summation of CO2 emissions'
     EQ_EMISSION_CUMULATIVE     'cumulative CO2 emissions'
@@ -387,11 +388,9 @@ EQUATIONS
 ;
 
 * definition of equations
-$ONTEXT
-EQ_ENERGY_BALANCE(energy, level, year_all) $ energy_level(energy, level)..
+EQ_ENERGY_BALANCE_LINKED(energy, level, year_all) $ energy_level(energy, level)..
     SUM(technology, ACT(technology, year_all) * (output(technology, energy, level) - input(technology, energy, level)))
   - SUM(sector $ map_energy_sector(energy, level, sector), PHYSENE(sector, year_all)) =G= 0 ;
-$OFFTEXT
 
 EQ_ENERGY_BALANCE(energy, level, year_all) $ energy_level(energy, level)..
     SUM(technology, ACT(technology, year_all) * (output(technology, energy, level) - input(technology, energy, level)))
