@@ -224,22 +224,29 @@ function set_macro_bounds_and_initial_values!(model)
         end
     end
     
-    # Set lower bounds on variables to avoid singularities
+    # Set lower bounds on variables to avoid singularities (only if not fixed)
     for y in year_all
-        set_lower_bound(model[:K][y], lotol * k0)
-        set_lower_bound(model[:Y][y], lotol * y0)
-        set_lower_bound(model[:C][y], lotol * c0)
-        set_lower_bound(model[:I][y], lotol * i0)
+        # Helper function to safely set bounds
+        safe_set_lower_bound = (var, bound) -> begin
+            if !is_fixed(var)
+                set_lower_bound(var, bound)
+            end
+        end
+        
+        safe_set_lower_bound(model[:K][y], lotol * k0)
+        safe_set_lower_bound(model[:Y][y], lotol * y0)
+        safe_set_lower_bound(model[:C][y], lotol * c0)
+        safe_set_lower_bound(model[:I][y], lotol * i0)
         
         if y != 2020
-            set_lower_bound(model[:KN][y], lotol * i0 * duration_period)
-            set_lower_bound(model[:YN][y], lotol * y0 * newlab[y])
+            safe_set_lower_bound(model[:KN][y], lotol * i0 * duration_period)
+            safe_set_lower_bound(model[:YN][y], lotol * y0 * newlab[y])
         end
         
         for s in sector
-            set_lower_bound(model[:PRODENE][s, y], lotol * enestart[(s, y)] / aeei_factor[(s, y)])
+            safe_set_lower_bound(model[:PRODENE][s, y], lotol * enestart[(s, y)] / aeei_factor[(s, y)])
             if y != 2020
-                set_lower_bound(model[:NEWENE][s, y], lotol * enestart[(s, y)] / aeei_factor[(s, y)])
+                safe_set_lower_bound(model[:NEWENE][s, y], lotol * enestart[(s, y)] / aeei_factor[(s, y)])
             end
         end
     end
