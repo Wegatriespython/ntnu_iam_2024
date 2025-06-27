@@ -175,11 +175,33 @@ function create_energy_model!(model)
     COST_ANNUAL = model[:COST_ANNUAL]
 
     # Energy balance
-    for e in energy, l in level, y in year_all
-        if haskey(energy_level, (e,l))
-            @constraint(model,
-                sum(ACT[t,y]*(get(output,(t,e,l),0)-get(input,(t,e,l),0)) for t in technology)
-                - get(demand,(e,l),0)*(gdp[y]/gdp[2020])^beta >= 0)
+    # Check if we're in integrated mode (PHYSENE exists) or standalone mode
+    if haskey(object_dictionary(model), :PHYSENE)
+        # Integrated mode: use PHYSENE from macro model
+        for e in energy, l in level, y in year_all
+            if haskey(energy_level, (e,l))
+                # Find sectors that map to this energy-level combination
+                sectors_for_el = [s for ((e2,l2,s),_) in map_energy_sector if e2==e && l2==l]
+                if !isempty(sectors_for_el)
+                    @constraint(model,
+                        sum(ACT[t,y]*(get(output,(t,e,l),0)-get(input,(t,e,l),0)) for t in technology)
+                        - sum(model[:PHYSENE][s,y] for s in sectors_for_el) >= 0)
+                else
+                    # No sector mapping, use standalone version
+                    @constraint(model,
+                        sum(ACT[t,y]*(get(output,(t,e,l),0)-get(input,(t,e,l),0)) for t in technology)
+                        - get(demand,(e,l),0)*(gdp[y]/gdp[2020])^beta >= 0)
+                end
+            end
+        end
+    else
+        # Standalone mode: use fixed demand with GDP scaling
+        for e in energy, l in level, y in year_all
+            if haskey(energy_level, (e,l))
+                @constraint(model,
+                    sum(ACT[t,y]*(get(output,(t,e,l),0)-get(input,(t,e,l),0)) for t in technology)
+                    - get(demand,(e,l),0)*(gdp[y]/gdp[2020])^beta >= 0)
+            end
         end
     end
 
@@ -231,24 +253,30 @@ function create_energy_model!(model)
         sum(COST_ANNUAL[y]*period_length*(1+discount_rate)^(-period_length*(yi[y]-1)) for y in year_all)
         == TOTAL_COST)
 
-    # Historical calibration
-    fix(ACT["coal_ppl",2020],9.462;force=true)
-    fix(ACT["oil_ppl",2020],0.7;force=true)
-    fix(ACT["solar_PV_ppl",2020],0.839;force=true)
-    fix(ACT["gas_ppl",2020],6.36;force=true)
-    fix(ACT["nuclear_ppl",2020],2.68;force=true)
-    fix(ACT["hydro_ppl",2020],4.36;force=true)
-    fix(ACT["wind_ppl",2020],1.6;force=true)
-    fix(ACT["bio_ppl",2020],0.69;force=true)
-    set_lower_bound(ACT["other_ppl",2020],0.127)
-    fix(ACT["coal_nele",2020],10.7;force=true)
-    fix(ACT["oil_nele",2020],43.0;force=true)
-    fix(ACT["gas_nele",2020],18.7;force=true)
-    fix(ACT["bio_nele",2020],10.6;force=true)
-    set_lower_bound(ACT["other_nele",2020],0.28)
+    # Historical calibration - only apply if not in integrated mode
+    # (integrated mode applies these constraints separately)
+    if !haskey(object_dictionary(model), :PHYSENE)
+        fix(ACT["coal_ppl",2020],9.462;force=true)
+        fix(ACT["oil_ppl",2020],0.7;force=true)
+        fix(ACT["solar_PV_ppl",2020],0.839;force=true)
+        fix(ACT["gas_ppl",2020],6.36;force=true)
+        fix(ACT["nuclear_ppl",2020],2.68;force=true)
+        fix(ACT["hydro_ppl",2020],4.36;force=true)
+        fix(ACT["wind_ppl",2020],1.6;force=true)
+        fix(ACT["bio_ppl",2020],0.69;force=true)
+        set_lower_bound(ACT["other_ppl",2020],0.127)
+        fix(ACT["coal_nele",2020],10.7;force=true)
+        fix(ACT["oil_nele",2020],43.0;force=true)
+        fix(ACT["gas_nele",2020],18.7;force=true)
+        fix(ACT["bio_nele",2020],10.6;force=true)
+        set_lower_bound(ACT["other_nele",2020],0.28)
+    end
 
     # Objective
-    @objective(model, Min, TOTAL_COST)
+    # Only set objective if not in integrated mode
+    if !haskey(object_dictionary(model), :UTILITY)
+        @objective(model, Min, TOTAL_COST)
+    end
 
     return model
 end
