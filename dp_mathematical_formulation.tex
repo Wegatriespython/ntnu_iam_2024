@@ -1,0 +1,348 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{geometry}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{bm}
+
+\geometry{margin=1in}
+
+\title{Dynamic Programming Formulation for Energy-Economy Integrated Assessment Model}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Model Overview}
+
+The dynamic programming formulation solves a stochastic optimal control problem for an integrated energy-economy system using the Bellman equation approach with backward induction. The model employs a three-dimensional state space with vintage capital accumulation and endogenous energy service demand determination.
+
+\section{State Space Definition}
+
+The model operates over discrete time periods $t \in \{1, 2, \ldots, T\}$ corresponding to years $\{2020, 2030, 2040, 2050, 2060, 2070, 2080\}$. The state space is three-dimensional:
+
+\begin{align}
+\mathcal{S}_t = \{(K_t, Y_t, PRODENE_t) : K_t \in [K_{\min}, K_{\max}], Y_t \in [Y_{\min}, Y_{\max}], PRODENE_t \in [P_{\min}, P_{\max}]\}
+\end{align}
+
+where:
+\begin{itemize}
+\item $K_t$ is total capital stock (trillion USD)
+\item $Y_t$ is total production capacity (trillion USD) 
+\item $PRODENE_t$ is energy service capacity (production energy units)
+\end{itemize}
+
+Grid bounds and discretization:
+\begin{align}
+K_{\min} &= 50.0, \quad K_{\max} = 600.0, \quad n_K = 30 \\
+Y_{\min} &= 30.0, \quad Y_{\max} = 300.0, \quad n_Y = 20 \\
+P_{\min} &= 75.0, \quad P_{\max} = 300.0, \quad n_{PRODENE} = 15
+\end{align}
+
+\section{Production Technology}
+
+The economy employs a nested CES production function with vintage capital structure:
+
+\begin{align}
+Y_t^N &= \left[a \cdot (K_t^N)^{\rho \kappa} \cdot (L_t^N)^{\rho(1-\kappa)} + b \cdot (ELEC_t^N)^{\rho \varepsilon} \cdot (NELE_t^N)^{\rho(1-\varepsilon)}\right]^{1/\rho}
+\end{align}
+
+where:
+\begin{itemize}
+\item $Y_t^N$ is new vintage production capacity
+\item $K_t^N$ is new vintage capital 
+\item $L_t^N$ is new vintage labor supply
+\item $ELEC_t^N, NELE_t^N$ are new electricity and non-electricity energy services
+\item $\rho = -0.233$ is the CES transformation parameter (elasticity of substitution $\sigma = 0.3$)
+\item $\kappa = 0.28$ is the capital value share parameter
+\item $\varepsilon = 0.42$ is the electricity value share parameter
+\item $a, b$ are calibrated efficiency parameters
+\end{itemize}
+
+\section{Vintage Capital Dynamics}
+
+Both capital and production capacity follow vintage accumulation with depreciation:
+
+\begin{align}
+K_{t+1} &= K_t (1-\delta)^{\Delta t} + K_t^N \\
+Y_{t+1} &= Y_t (1-\delta)^{\Delta t} + Y_t^N \\
+PRODENE_{t+1} &= PRODENE_t (1-\delta)^{\Delta t} + NEWENE_t
+\end{align}
+
+where:
+\begin{itemize}
+\item $\delta = 0.05$ is the annual depreciation rate
+\item $\Delta t = 10$ is the period length in years
+\item $K_t^N = \Delta t \cdot I_t$ relates new capital to investment
+\item $NEWENE_t = ELEC_t^N + NELE_t^N$ is total new energy services
+\end{itemize}
+
+\section{Energy Service Determination}
+
+Given a target new production $Y_t^N$, the optimal energy service allocation is determined analytically. From the first-order conditions of the CES production function, the optimal energy ratio is:
+
+\begin{align}
+r^* = \frac{ELEC_t^N}{NELE_t^N} = \left(\frac{\varepsilon}{1-\varepsilon} \cdot \frac{p_{NELE}}{p_{ELEC}}\right)^{1/(1-\rho)}
+\end{align}
+
+where $p_{ELEC} = 0.0567$ and $p_{NELE} = 0.020$ are calibrated energy prices.
+
+Given the target production $Y_t^N$ and capital-labor input $K_t^N, L_t^N$, the required energy term is:
+
+\begin{align}
+E_{term} = (Y_t^N)^\rho - a \cdot (K_t^N)^{\rho \kappa} \cdot (L_t^N)^{\rho(1-\kappa)}
+\end{align}
+
+The analytical solution for non-electricity energy is:
+
+\begin{align}
+NELE_t^N = \left(\frac{E_{term}}{b \cdot (r^*)^{\rho \varepsilon}}\right)^{1/\rho}
+\end{align}
+
+And electricity energy:
+\begin{align}
+ELEC_t^N = r^* \cdot NELE_t^N
+\end{align}
+
+\section{Energy Cost Surrogate Model}
+
+Energy system costs are approximated using a time-aware autoregressive surrogate model:
+
+\begin{align}
+EC_t = \beta_0 + \beta_1 EC_{t-1} + \beta_2 PHYSENE_{ELEC,t} + \beta_3 PHYSENE_{NELE,t} + \beta_4 t + \beta_5 (PHYSENE_{total,t} \cdot t)
+\end{align}
+
+where physical energy demands include autonomous energy efficiency improvement (AEEI):
+
+\begin{align}
+PHYSENE_{ELEC,t} &= PRODENE_{ELEC,t} \cdot AEEI_{ELEC,t} \\
+PHYSENE_{NELE,t} &= PRODENE_{NELE,t} \cdot AEEI_{NELE,t} \\
+AEEI_{s,t} &= \prod_{j=1}^{t} (1 - \alpha_{s,j})^{\Delta t}
+\end{align}
+
+with $\alpha_{s,j} = 0.02$ for both electricity and non-electricity sectors.
+
+The surrogate model coefficients are:
+\begin{align}
+\boldsymbol{\beta} = [268.278, -0.0283, 106.981, 17.496, -58.096, 0.157]
+\end{align}
+
+Energy demands are projected based on GDP growth:
+\begin{align}
+PHYSENE_{s,t} = PHYSENE_{s,base} \cdot \left(\frac{GDP_t}{GDP_{base}}\right)^{0.7}
+\end{align}
+
+\section{Bellman Equation}
+
+The value function satisfies the Bellman equation:
+
+\begin{align}
+V_t(K_t, Y_t, PRODENE_t) = \max_{I_t, Y_t^N} \left\{ UDF_t \cdot u(C_t) \cdot \Delta t + \beta \cdot V_{t+1}(K_{t+1}, Y_{t+1}, PRODENE_{t+1}) \right\}
+\end{align}
+
+subject to the budget constraint:
+\begin{align}
+C_t = Y_t - I_t - EC_t
+\end{align}
+
+and state evolution equations given above.
+
+The utility function employs logarithmic preferences:
+\begin{align}
+u(C_t) = \ln(C_t)
+\end{align}
+
+Utility discount factors account for period-specific discounting:
+\begin{align}
+UDF_t = \left(\frac{1}{1 + \delta_{rate}}\right)^{t-1}
+\end{align}
+
+where $\delta_{rate} = 0.05$ is the social discount rate.
+
+\section{Terminal Condition}
+
+For the terminal period $T$ (year 2080), the model applies a finite-time correction to account for post-terminal utility:
+
+\begin{align}
+V_T(K_T, Y_T, PRODENE_T) = UDF_T \cdot \ln(C_T) \cdot \left(\Delta t + \frac{1}{\gamma_{T}}\right)
+\end{align}
+
+where $\gamma_T = g_T + \delta_{rate}$ combines the terminal growth rate and discount rate.
+
+Terminal investment follows the steady-state condition:
+\begin{align}
+I_T = K_T \cdot (g_T + \delta)
+\end{align}
+
+\section{Labor Supply Evolution}
+
+Labor supply grows exogenously with separate accounting for vintage labor:
+
+\begin{align}
+L_t &= \prod_{j=1}^{t} (1 + g_{j})^{\Delta t} \\
+L_t^N &= \begin{cases}
+L_t & \text{if } t = 1 \\
+L_t - L_{t-1} \cdot (1-\delta)^{\Delta t} & \text{if } t > 1
+\end{cases}
+\end{align}
+
+where $g_t$ are period-specific growth rates.
+
+\section{Analytical First-Order Conditions}
+
+From the Bellman problem
+\begin{align}
+V_t(K_t, Y_t, P_t) = \max_{I_t, Y_t^N} \left\{ UDF_t \cdot \ln(C_t) \cdot \Delta t + \beta \cdot V_{t+1}(K_{t+1}, Y_{t+1}, P_{t+1}) \right\}
+\end{align}
+
+with
+\begin{align}
+C_t &= Y_t - I_t - EC_t, \\
+K_{t+1} &= K_t(1-\delta)^{\Delta t} + \Delta t \cdot I_t, \\
+Y_{t+1} &= Y_t(1-\delta)^{\Delta t} + Y_t^N, \\
+P_{t+1} &= P_t(1-\delta)^{\Delta t} + E_t^N,
+\end{align}
+
+the two first-order conditions are:
+
+\subsection{FOC with respect to $I_t$}
+
+\begin{align}
+UDF_t \cdot \frac{1}{C_t} \cdot (-1) \cdot \Delta t + \beta \cdot \frac{\partial V_{t+1}}{\partial K_{t+1}} \cdot \Delta t = 0
+\end{align}
+
+This is the standard Euler equation for optimal investment.
+
+\subsection{FOC with respect to $Y_t^N$}
+
+\begin{align}
+UDF_t \cdot \frac{1}{C_t} \cdot \left(-\frac{\partial EC_t}{\partial Y_t^N}\right) \cdot \Delta t + \beta \left[\frac{\partial V_{t+1}}{\partial Y_{t+1}} + \frac{\partial V_{t+1}}{\partial P_{t+1}} \cdot \frac{\partial P_{t+1}}{\partial Y_t^N}\right] = 0
+\end{align}
+
+where $\frac{\partial EC_t}{\partial Y_t^N}$ comes from the AR-surrogate model and $\frac{\partial P_{t+1}}{\partial Y_t^N}$ follows from the analytical energy allocation (the $r^*$-formula).
+
+These conditions are fully "plug-and-chug" once the partial derivatives $\frac{\partial V_{t+1}}{\partial K_{t+1}}$, $\frac{\partial V_{t+1}}{\partial Y_{t+1}}$, and $\frac{\partial V_{t+1}}{\partial P_{t+1}}$ are evaluated through interpolation/approximation.
+
+\section{Envelope Theorem Conditions}
+
+For an interior optimum in a smooth, concave dynamic programming problem, the envelope theorem allows us to differentiate the Bellman equation with respect to state variables while ignoring the indirect effect through optimally chosen controls.
+
+Let
+\begin{align}
+V_t(K_t,Y_t,P_t) = \max_{I_t,Y^N_t}\Bigl\{\,\underbrace{UDF_t\,\ln(C_t)\,\Delta t}_{f(C_t)} + \beta\,V_{t+1}(K_{t+1},Y_{t+1},P_{t+1})\Bigr\}
+\end{align}
+
+where the state transitions are as defined above.
+
+\subsection{Envelope with respect to $K_t$}
+
+\begin{align}
+\frac{\partial V_t}{\partial K_t} = \underbrace{\frac{\partial f}{\partial K_t}}_{0} + \beta \left[V_{K_{t+1}} \cdot \frac{\partial K_{t+1}}{\partial K_t}\right] = \beta \cdot (1-\delta)^{\Delta t} \cdot V_{t+1,K}
+\end{align}
+
+Here $\frac{\partial f}{\partial K_t} = 0$ because current payoff $f$ depends on $K_t$ only through $I_t$, and the envelope theorem tells us to hold $I_t$ fixed.
+
+\subsection{Envelope with respect to $Y_t$}
+
+\begin{align}
+\frac{\partial V_t}{\partial Y_t} = \underbrace{UDF_t \cdot \frac{1}{C_t} \cdot \Delta t}_{f_{Y_t}} + \beta \left[V_{t+1,Y} \cdot \frac{\partial Y_{t+1}}{\partial Y_t}\right] = UDF_t \cdot \frac{\Delta t}{C_t} + \beta \cdot (1-\delta)^{\Delta t} \cdot V_{t+1,Y}
+\end{align}
+
+Since $\frac{\partial C_t}{\partial Y_t} = 1$ and $\frac{\partial Y_{t+1}}{\partial Y_t} = (1-\delta)^{\Delta t}$.
+
+\subsection{Envelope with respect to $P_t$}
+
+\begin{align}
+\frac{\partial V_t}{\partial P_t} = \underbrace{\frac{\partial f}{\partial P_t}}_{0} + \beta \left[V_{t+1,P} \cdot \frac{\partial P_{t+1}}{\partial P_t}\right] = \beta \cdot (1-\delta)^{\Delta t} \cdot V_{t+1,P}
+\end{align}
+
+\subsection{Regularity Conditions}
+
+The envelope theorem requires the following assumptions:
+\begin{enumerate}
+\item \textbf{Interior solution}: neither $I_t$ nor $Y^N_t$ lie on a constraint boundary.
+\item \textbf{Differentiability}: $u(C)$, the surrogate $EC_t$, and the transition maps are continuously differentiable.
+\item \textbf{Concavity}: the Bellman operator objective is concave in $(I_t,Y^N_t)$, ensuring a unique interior maximizer.
+\item \textbf{Nonbinding state constraints}: any bounds on $K_t,Y_t,P_t$ are not active at the optimum.
+\end{enumerate}
+
+Under these conditions, the envelope derivatives can be safely used when writing FOCs and implementing either a Newton-type solver or a projection method for $V$.
+
+\section{Numerical Solution Algorithm}
+
+The model is solved using backward induction with discrete state space approximation:
+
+\textbf{Step 1:} Initialize terminal value function $V_T(K_T, Y_T, PRODENE_T)$ using terminal conditions.
+
+\textbf{Step 2:} For $t = T-1, T-2, \ldots, 1$:
+\begin{enumerate}
+\item For each state $(K_t, Y_t, PRODENE_t)$ on the discrete grid
+\item Search over feasible investment levels $I_t \in [I_{\min}, I_{\max}]$
+\item Search over feasible production targets $Y_t^N \in [Y^N_{\min}, Y^N_{\max}]$
+\item Calculate energy allocation using analytical solution
+\item Evaluate energy costs using surrogate model
+\item Compute continuation value using interpolation
+\item Select optimal policy maximizing current + continuation value
+\end{enumerate}
+
+\textbf{Step 3:} Simulate forward using optimal policy functions to generate economic trajectories.
+
+\section{Calibrated Parameters}
+
+The CES production function is calibrated to base year (2020) data:
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Parameter & Value \\
+\midrule
+Base year GDP ($Y_0$) & 71.0 trillion USD \\
+Base year capital ($K_0$) & 198.8 trillion USD \\
+Base year consumption ($C_0$) & 51.0 trillion USD \\
+Base year investment ($I_0$) & 14.94 trillion USD \\
+Electricity demand ($ELEC_0$) & 22.6 PWh \\
+Non-electricity demand ($NELE_0$) & 87.3 PWh \\
+Capital coefficient ($a$) & Calibrated \\
+Energy coefficient ($b$) & Calibrated \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Economic parameters:
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Parameter & Value \\
+\midrule
+Annual discount factor ($\beta$) & $0.95^{10}$ \\
+Annual depreciation rate ($\delta$) & 0.05 \\
+Social discount rate ($\delta_{rate}$) & 0.05 \\
+Period length ($\Delta t$) & 10 years \\
+Elasticity of substitution ($\sigma$) & 0.3 \\
+Capital value share ($\kappa$) & 0.28 \\
+Electricity value share ($\varepsilon$) & 0.42 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Model Output}
+
+The dynamic programming solution yields optimal time paths for:
+\begin{itemize}
+\item Capital stock $\{K_t\}_{t=1}^T$
+\item Production capacity $\{Y_t\}_{t=1}^T$ 
+\item Consumption $\{C_t\}_{t=1}^T$
+\item Investment $\{I_t\}_{t=1}^T$
+\item Energy service demands $\{ELEC_t, NELE_t\}_{t=1}^T$
+\item Energy costs $\{EC_t\}_{t=1}^T$
+\item Total discounted utility $U = \sum_{t=1}^T UDF_t \cdot u(C_t) \cdot \Delta t$
+\end{itemize}
+
+The formulation provides a computationally tractable approach to solving the integrated energy-economy optimization problem while maintaining consistency with the underlying MESSAGE-MACRO framework.
+
+\end{document}

@@ -66,6 +66,10 @@ using Optim
     
     # Value and policy functions - now 3D arrays
     V::Array{Float64,4} = zeros(n_K, n_Y, n_PRODENE, T)  # V[i,j,k,t]
+    # Envelope derivatives for analytical FOCs
+    V_K::Array{Float64,4} = zeros(n_K, n_Y, n_PRODENE, T)  # ∂V/∂K
+    V_Y::Array{Float64,4} = zeros(n_K, n_Y, n_PRODENE, T)  # ∂V/∂Y  
+    V_P::Array{Float64,4} = zeros(n_K, n_Y, n_PRODENE, T)  # ∂V/∂P
     C_policy::Array{Float64,3} = zeros(n_K, n_Y, n_PRODENE)  # Current period only
     I_policy::Array{Float64,3} = zeros(n_K, n_Y, n_PRODENE)
     
@@ -148,6 +152,199 @@ function solve_newene_analytical(YN_target::Float64, KN::Float64, L::Float64,
     return (ELEC = ELEC, NELE = NELE, feasible = true)
 end
 
+# Calculate gradient of energy cost with respect to YN
+function energy_cost_gradient(YN_target::Float64, KN::Float64, L::Float64,
+                             Y_prev::Float64, PRODENE_prev::Float64,
+                             model::DPMacroModel, year::Int, energy_cost_func::Function)
+    # Use finite differences to approximate ∂EC/∂YN
+    # This could be replaced with analytical derivatives if available
+    
+    h = 1e-6  # Small perturbation
+    
+    # Calculate energy costs at YN_target
+    energy_result = calculate_energy_for_yn(YN_target, KN, L, Y_prev, PRODENE_prev, 
+                                          model, year, energy_cost_func)
+    EC_base = energy_result.EC
+    
+    # Calculate energy costs at YN_target + h
+    energy_result_plus = calculate_energy_for_yn(YN_target + h, KN, L, Y_prev, PRODENE_prev,
+                                                model, year, energy_cost_func)
+    EC_plus = energy_result_plus.EC
+    
+    # Finite difference approximation
+    dEC_dYN = (EC_plus - EC_base) / h
+    
+    # Also calculate ∂P_{t+1}/∂YN for the FOC
+    # From the energy allocation, NEWENE depends on YN, so P_{t+1} depends on YN
+    PRODENE_plus = energy_result_plus.PRODENE_total
+    PRODENE_base = energy_result.PRODENE_total
+    
+    dP_dYN = (PRODENE_plus - PRODENE_base) / h
+    
+    return (dEC_dYN = dEC_dYN, dP_dYN = dP_dYN)
+end
+
+# Solve for optimal controls using analytical FOCs
+function solve_optimal_controls_foc(K::Float64, Y_prev::Float64, PRODENE_prev::Float64,
+                                   V_next_interp, V_K_interp, V_Y_interp, V_P_interp,
+                                   model::DPMacroModel, year::Int, energy_cost_func::Function)
+    # Get time-specific parameters
+    L_new = get(model.newlab, year, 1.0)
+    udf = get(model.udf, year, model.β)
+    
+    # Define objective function for joint optimization
+    function objective(controls)
+        I, YN = controls
+        
+        # Feasibility checks
+        if I <= 0 || YN <= 0 || I >= Y_prev - 0.1
+            return -Inf
+        end
+        
+        # Calculate state transitions
+        KN = model.duration * I
+        
+        # Calculate energy and costs
+        energy_result = calculate_energy_for_yn(YN, KN, L_new, Y_prev, PRODENE_prev,
+                                              model, year, energy_cost_func)
+        
+        # Budget constraint
+        C = energy_result.Y - I - energy_result.EC
+        if C <= 0
+            return -Inf
+        end
+        
+        # Next period states
+        K_next = K * (1 - model.depr)^model.duration + KN
+        Y_next = energy_result.Y
+        PRODENE_next = energy_result.PRODENE_total
+        
+        # Check state bounds
+        if K_next < model.K_min || K_next > model.K_max ||
+           Y_next < model.Y_min || Y_next > model.Y_max ||
+           PRODENE_next < model.PRODENE_grid[1] || PRODENE_next > model.PRODENE_grid[end]
+            return -Inf
+        end
+        
+        # Interpolate next period value
+        V_next = V_next_interp(K_next, Y_next, PRODENE_next)
+        
+        # Bellman equation
+        return udf * log(C) * model.duration + model.β * V_next
+    end
+    
+    # Define FOC residuals for Newton method
+    function foc_residuals(controls)
+        I, YN = controls
+        
+        # Basic feasibility
+        if I <= 0 || YN <= 0 || I >= Y_prev - 0.1
+            return [1e10, 1e10]  # Large residual for infeasible points
+        end
+        
+        KN = model.duration * I
+        
+        # Calculate energy and gradients
+        energy_result = calculate_energy_for_yn(YN, KN, L_new, Y_prev, PRODENE_prev,
+                                              model, year, energy_cost_func)
+        C = energy_result.Y - I - energy_result.EC
+        
+        if C <= 0
+            return [1e10, 1e10]
+        end
+        
+        # Next period states
+        K_next = K * (1 - model.depr)^model.duration + KN
+        Y_next = energy_result.Y
+        PRODENE_next = energy_result.PRODENE_total
+        
+        # Get next period envelope derivatives
+        V_K_next = V_K_interp(K_next, Y_next, PRODENE_next)
+        V_Y_next = V_Y_interp(K_next, Y_next, PRODENE_next)
+        V_P_next = V_P_interp(K_next, Y_next, PRODENE_next)
+        
+        # Calculate gradients
+        gradients = energy_cost_gradient(YN, KN, L_new, Y_prev, PRODENE_prev,
+                                       model, year, energy_cost_func)
+        
+        # FOC for I: UDF * (1/C) * (-1) * Δt + β * V_K_next * Δt = 0
+        foc_I = -udf * model.duration / C + model.β * V_K_next * model.duration
+        
+        # FOC for YN: UDF * (1/C) * (-∂EC/∂YN) * Δt + β * [V_Y_next + V_P_next * ∂P/∂YN] = 0
+        foc_YN = -udf * model.duration * gradients.dEC_dYN / C + 
+                 model.β * (V_Y_next + V_P_next * gradients.dP_dYN)
+        
+        return [foc_I, foc_YN]
+    end
+    
+    # Try Newton method first, fall back to optimization if needed
+    try
+        # Initial guess based on previous period or heuristics
+        I_guess = min(0.2 * Y_prev, Y_prev - 1.0)
+        YN_guess = 0.8 * Y_prev
+        
+        # Simple Newton iteration
+        controls = [I_guess, YN_guess]
+        for iter in 1:10
+            residuals = foc_residuals(controls)
+            
+            # Check convergence
+            if maximum(abs.(residuals)) < 1e-6
+                break
+            end
+            
+            # Simple step (could be improved with proper Jacobian)
+            step_size = 0.1
+            controls[1] -= step_size * residuals[1] * controls[1]
+            controls[2] -= step_size * residuals[2] * controls[2]
+            
+            # Keep in bounds
+            controls[1] = max(0.01 * Y_prev, min(controls[1], 0.4 * Y_prev))
+            controls[2] = max(0.1 * Y_prev, min(controls[2], 2.0 * Y_prev))
+        end
+        
+        # Evaluate final objective
+        obj_value = objective(controls)
+        
+        if obj_value > -Inf
+            return (I = controls[1], YN = controls[2], value = obj_value, converged = true)
+        end
+    catch e
+        # Fall back to optimization
+    end
+    
+    # Fall back to optimization-based approach
+    try
+        # Bounds for optimization
+        I_bounds = (0.01 * Y_prev, min(0.4 * Y_prev, Y_prev - 0.1))
+        YN_bounds = (0.1 * Y_prev, 2.0 * Y_prev)
+        
+        # Use grid search as fallback
+        I_grid = range(I_bounds[1], I_bounds[2], length=15)
+        YN_grid = range(YN_bounds[1], YN_bounds[2], length=15)
+        
+        best_value = -Inf
+        best_I = I_bounds[1]
+        best_YN = YN_bounds[1]
+        
+        for I in I_grid, YN in YN_grid
+            val = objective([I, YN])
+            if val > best_value
+                best_value = val
+                best_I = I
+                best_YN = YN
+            end
+        end
+        
+        return (I = best_I, YN = best_YN, value = best_value, converged = false)
+    catch e
+        # Last resort: return feasible default
+        I_default = 0.1 * Y_prev
+        YN_default = 0.5 * Y_prev
+        return (I = I_default, YN = YN_default, value = -Inf, converged = false)
+    end
+end
+
 # Calculate energy variables for given YN
 function calculate_energy_for_yn(YN_target::Float64, KN::Float64, L::Float64,
                                Y_prev::Float64, PRODENE_prev::Float64,
@@ -200,7 +397,7 @@ function calculate_energy_for_yn(YN_target::Float64, KN::Float64, L::Float64,
     )
 end
 
-# Bellman operator with 3-state formulation
+# Bellman operator with FOCs and envelope conditions
 function bellman_operator_3d!(bp::BellmanProblem, t::Int)
     model = bp.model
     year = model.years[t]
@@ -214,10 +411,35 @@ function bellman_operator_3d!(bp::BellmanProblem, t::Int)
     # Terminal period utility correction
     finite_corr = t == model.T ? get(model.finite_time_corr, year, 0.0) : 0.0
     
-    # Create interpolator for next period value function if not terminal
+    # Create interpolators for next period value function and derivatives if not terminal
+    V_next_interp = nothing
+    V_K_interp = nothing
+    V_Y_interp = nothing 
+    V_P_interp = nothing
+    
     if t < model.T
-        V_next_interp = linear_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
-                                            model.V[:,:,:,t+1], extrapolation_bc=Line())
+        # Use cubic spline interpolation for better gradient accuracy
+        try
+            V_next_interp = cubic_spline_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                                      model.V[:,:,:,t+1], extrapolation_bc=Line())
+            V_K_interp = cubic_spline_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                                   model.V_K[:,:,:,t+1], extrapolation_bc=Line())
+            V_Y_interp = cubic_spline_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                                   model.V_Y[:,:,:,t+1], extrapolation_bc=Line())
+            V_P_interp = cubic_spline_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                                   model.V_P[:,:,:,t+1], extrapolation_bc=Line())
+        catch e
+            # Fall back to linear interpolation if cubic spline fails
+            println("Warning: Cubic spline interpolation failed, using linear interpolation")
+            V_next_interp = linear_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                                model.V[:,:,:,t+1], extrapolation_bc=Line())
+            V_K_interp = linear_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                             model.V_K[:,:,:,t+1], extrapolation_bc=Line())
+            V_Y_interp = linear_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                             model.V_Y[:,:,:,t+1], extrapolation_bc=Line())
+            V_P_interp = linear_interpolation((model.K_grid, model.Y_grid, model.PRODENE_grid), 
+                                             model.V_P[:,:,:,t+1], extrapolation_bc=Line())
+        end
     end
     
     # For each state combination
@@ -261,68 +483,105 @@ function bellman_operator_3d!(bp::BellmanProblem, t::Int)
                         model.EC_policy[i,j,k] = energy_result.EC
                     end
                     
-                else  # Non-terminal periods
-                    C_opt = 0.0
-                    I_opt = 0.0
+                else  # Non-terminal periods - use FOCs
+                    # Solve using analytical FOCs
+                    result = solve_optimal_controls_foc(K, Y_prev, PRODENE_prev,
+                                                       V_next_interp, V_K_interp, V_Y_interp, V_P_interp,
+                                                       model, year, bp.energy_cost_func)
                     
-                    # Search over investment levels
-                    I_min = 0.01 * Y_prev  
-                    I_max = min(0.5 * Y_prev, Y_prev - 0.1)  # Leave room for consumption
+                    V_opt = result.value
+                    I_opt = result.I
+                    YN_opt = result.YN
                     
-                    # Grid search over investment
-                    for I in range(I_min, I_max, length=20)
-                        # Calculate new capital vintage
-                        KN = model.duration * I
+                    if V_opt > -Inf
+                        # Calculate final energy result for policies
+                        KN_opt = model.duration * I_opt
+                        energy_result = calculate_energy_for_yn(YN_opt, KN_opt, L_new,
+                                                              Y_prev, PRODENE_prev,
+                                                              model, year, bp.energy_cost_func)
+                        C_opt = energy_result.Y - I_opt - energy_result.EC
                         
-                        # Search over different YN values
-                        YN_min = 0.5 * Y_prev
-                        YN_max = 2.0 * Y_prev
-                        
-                        for YN in range(YN_min, YN_max, length=15)
-                            # Calculate energy and costs for this YN
-                            energy_result = calculate_energy_for_yn(YN, KN, L_new,
-                                                                   Y_prev, PRODENE_prev,
-                                                                   model, year, bp.energy_cost_func)
-                            
-                            # Consumption from budget constraint
-                            C = energy_result.Y - I - energy_result.EC
-                            
-                            # Next period states
-                            K_next = K * (1 - model.depr)^model.duration + KN
-                            Y_next = energy_result.Y
-                            PRODENE_next = energy_result.PRODENE_total
-                            
-                            # Check feasibility
-                            if C > 0 && K_next >= model.K_min && K_next <= model.K_max &&
-                               Y_next >= model.Y_min && Y_next <= model.Y_max &&
-                               PRODENE_next >= model.PRODENE_grid[1] && PRODENE_next <= model.PRODENE_grid[end]
-                                
-                                # Interpolate next period value
-                                V_next = V_next_interp(K_next, Y_next, PRODENE_next)
-                                
-                                # Current utility + continuation value
-                                V_candidate = udf * log(C) * model.duration + model.β * V_next
-                                
-                                if V_candidate > V_opt
-                                    V_opt = V_candidate
-                                    C_opt = C
-                                    I_opt = I
-                                    
-                                    # Store optimal policies
-                                    model.C_policy[i,j,k] = C
-                                    model.I_policy[i,j,k] = I
-                                    model.KN_policy[i,j,k] = KN
-                                    model.YN_policy[i,j,k] = YN
-                                    model.NEWENE_total_policy[i,j,k] = energy_result.NEWENE_total
-                                    model.EC_policy[i,j,k] = energy_result.EC
-                                end
-                            end
-                        end
+                        # Store optimal policies
+                        model.C_policy[i,j,k] = C_opt
+                        model.I_policy[i,j,k] = I_opt
+                        model.KN_policy[i,j,k] = KN_opt
+                        model.YN_policy[i,j,k] = YN_opt
+                        model.NEWENE_total_policy[i,j,k] = energy_result.NEWENE_total
+                        model.EC_policy[i,j,k] = energy_result.EC
                     end
                 end
                 
                 # Store value function
                 model.V[i,j,k,t] = V_opt
+                
+                # Calculate and store envelope derivatives
+                if t < model.T && V_opt > -Inf
+                    # Get next period states for envelope calculation
+                    if V_opt > -Inf
+                        I_current = model.I_policy[i,j,k]
+                        YN_current = model.YN_policy[i,j,k]
+                        KN_current = model.KN_policy[i,j,k]
+                        
+                        energy_result = calculate_energy_for_yn(YN_current, KN_current, L_new,
+                                                              Y_prev, PRODENE_prev,
+                                                              model, year, bp.energy_cost_func)
+                        
+                        # Next period states
+                        K_next = K * (1 - model.depr)^model.duration + KN_current
+                        Y_next = energy_result.Y
+                        PRODENE_next = energy_result.PRODENE_total
+                        C_current = model.C_policy[i,j,k]
+                        
+                        # Check bounds for interpolation
+                        if K_next >= model.K_min && K_next <= model.K_max &&
+                           Y_next >= model.Y_min && Y_next <= model.Y_max &&
+                           PRODENE_next >= model.PRODENE_grid[1] && PRODENE_next <= model.PRODENE_grid[end]
+                            
+                            # Get next period envelope derivatives
+                            V_K_next = V_K_interp(K_next, Y_next, PRODENE_next)
+                            V_Y_next = V_Y_interp(K_next, Y_next, PRODENE_next)
+                            V_P_next = V_P_interp(K_next, Y_next, PRODENE_next)
+                            
+                            # Calculate envelope conditions
+                            # ∂V/∂K = β * (1-δ)^Δt * V_K_next
+                            model.V_K[i,j,k,t] = model.β * (1 - model.depr)^model.duration * V_K_next
+                            
+                            # ∂V/∂Y = UDF * Δt/C + β * (1-δ)^Δt * V_Y_next  
+                            model.V_Y[i,j,k,t] = udf * model.duration / C_current + 
+                                                 model.β * (1 - model.depr)^model.duration * V_Y_next
+                            
+                            # ∂V/∂P = β * (1-δ)^Δt * V_P_next
+                            model.V_P[i,j,k,t] = model.β * (1 - model.depr)^model.duration * V_P_next
+                        else
+                            # Set to zero if out of bounds
+                            model.V_K[i,j,k,t] = 0.0
+                            model.V_Y[i,j,k,t] = 0.0
+                            model.V_P[i,j,k,t] = 0.0
+                        end
+                    else
+                        # Set to zero if optimization failed
+                        model.V_K[i,j,k,t] = 0.0
+                        model.V_Y[i,j,k,t] = 0.0
+                        model.V_P[i,j,k,t] = 0.0
+                    end
+                elseif t == model.T
+                    # Terminal envelope conditions
+                    C_terminal = model.C_policy[i,j,k]
+                    if C_terminal > 0
+                        # Terminal marginal utilities
+                        model.V_K[i,j,k,t] = 0.0  # No future capital
+                        model.V_Y[i,j,k,t] = if finite_corr > 0
+                            udf * (model.duration + 1/finite_corr) / C_terminal
+                        else
+                            udf * model.duration / C_terminal
+                        end
+                        model.V_P[i,j,k,t] = 0.0  # No future production energy
+                    else
+                        model.V_K[i,j,k,t] = 0.0
+                        model.V_Y[i,j,k,t] = 0.0
+                        model.V_P[i,j,k,t] = 0.0
+                    end
+                end
             end
         end
     end

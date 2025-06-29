@@ -1,6 +1,8 @@
 # run_dp_macro.jl - Main runner for Dynamic Programming MACRO model
 # Solves the model using backward induction with vintage capital structure
 
+include("shared.jl")  # Load common sets and parameters
+include("macro/macro_data_load.jl")  # Use standard MACRO parameter loading
 include("dp/dp_macro_model.jl")
 include("dp/energy_cost_surrogate.jl")
 include("dp/dp_utilities.jl")
@@ -20,13 +22,33 @@ function run_dp_macro(;
   println("Dynamic Programming MACRO Model")
   println("="^60)
 
-  # Load parameters
-  println("\nLoading model parameters...")
-  params = load_macro_parameters()
+  # Use standard MACRO parameters (already loaded from macro_data_load.jl)
+  println("\nUsing standard MACRO parameters...")
+  
+  # Create parameter struct for DP model compatibility
+  params = (
+    years = year_all,
+    gdp_base = gdp_base,
+    k0 = k0,
+    c0 = c0,
+    i0 = i0,
+    depr = depr,
+    drate = drate,
+    labor = labor,
+    grow = grow,
+    growth_factor = growth_factor,
+    aeei_factor = aeei_factor
+  )
 
-  # Calibrate CES production function
-  println("\nCalibrating CES production function...")
-  ces = calibrate_ces()
+  # Calibrate CES production function using standard MACRO coefficients
+  println("\nUsing standard MACRO calibration...")
+  ces = (
+    a = a,  # From macro_data_load.jl
+    b = b,  # From macro_data_load.jl
+    ρ = rho,  # From macro_data_load.jl
+    kpvs = kpvs,
+    elvs = elvs
+  )
 
   # Initialize energy cost function
   println("\nInitializing energy cost surrogate...")
@@ -38,29 +60,10 @@ function run_dp_macro(;
   end
 
 
-  # Calculate utility discount factors and finite time correction
-  udf = Dict{Int,Float64}()
-  finite_time_corr = Dict{Int,Float64}()
-  for year in params.years
-    udf[year] = (1 / (1 + params.drate))^((year - 2020))
-    if year == 2080
-      finite_time_corr[year] = params.grow[year] + params.drate
-    end
-  end
-  
-  # Calculate new vintage labor
-  newlab = Dict{Int,Float64}()
-  for i in 1:length(params.years)
-    year = params.years[i]
-    if i == 1
-      newlab[year] = params.labor[year]
-    else
-      year_prev = params.years[i-1]
-      newlab[year] = params.labor[year] - params.labor[year_prev] * (1 - params.depr)^10.0
-    end
-  end
+  # Use standard MACRO calculated values
+  # udf, newlab, finite_time_corr already calculated in macro_data_load.jl
 
-  # Create DP model with vintage structure
+  # Create DP model with vintage structure using standard MACRO parameters
   model = DPMacroModel(
     years=params.years,
     n_K=n_grid,
@@ -72,12 +75,12 @@ function run_dp_macro(;
     depr=params.depr,
     drate=params.drate,
     labor=params.labor,
-    newlab=newlab,
+    newlab=newlab,  # From macro_data_load.jl
     aeei_factor=params.aeei_factor,
     growth=params.grow,
     growth_factor=params.growth_factor,
-    udf=udf,
-    finite_time_corr=finite_time_corr,
+    udf=udf,  # From macro_data_load.jl
+    finite_time_corr=finite_time_corr,  # From macro_data_load.jl
     y0=params.gdp_base,
     k0=params.k0,
     c0=params.c0,

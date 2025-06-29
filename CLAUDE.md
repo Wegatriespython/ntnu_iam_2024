@@ -11,6 +11,7 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 - **Energy System Model**: Technology-rich energy system optimization with capacity constraints, emissions, and cost accounting
 - **Macroeconomic Model**: CES production function with capital, labor, and energy services as inputs
 - **Generalized Benders Decomposition (GBD)**: Decomposition algorithm splitting energy and macro optimization
+- **Dynamic Programming MACRO**: Discrete-time dynamic programming formulation with vintage capital structure
 - **Configuration System**: Centralized parameter management through YAML and Julia config files
 - **Sensitivity Analysis**: Systematic parameter perturbation and analysis framework
 
@@ -28,6 +29,10 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 - `julia_model/run_MACRO.jl`: Standalone MACRO model runner
 - `julia_model/run_energy_macro.jl`: Integrated energy-macro model runner
 - `julia_model/run_energy_macro_gbd.jl`: GBD algorithm implementation
+- `julia_model/dp/dp_macro_model.jl`: Dynamic programming MACRO model with vintage capital structure
+- `julia_model/dp/energy_cost_surrogate.jl`: Energy cost surrogate models (polynomial and AR processes)
+- `julia_model/dp/dp_utilities.jl`: Utility functions for DP model operations
+- `julia_model/run_dp_macro.jl`: Dynamic programming MACRO model runner
 
 ### Test Infrastructure
 - Comprehensive test suite with 890+ tests covering parameter validation, component functionality, and integration
@@ -70,10 +75,19 @@ This project implements an integrated assessment model (IAM) for energy-economy 
 **Note**: While both currently equal 10 years, they represent conceptually different time scales and should be used consistently within their respective domains to maintain model integrity.
 
 ### Mathematical Formulation
+
+#### GBD Implementation
 - **Energy Subproblem**: Minimizes total system cost subject to service demand constraints
 - **Master Problem**: Maximizes utility subject to macroeconomic constraints and Benders cuts
 - **Dual Value Extraction**: Shadow prices from energy balance constraints converted to marginal service costs
 - **Convergence**: Relative gap tolerance between upper bound (energy cost) and lower bound (master objective)
+
+#### Dynamic Programming Implementation
+- **State Variables**: Capital stock (K), previous GDP (Y), production energy (PRODENE)
+- **Control Variables**: Investment (I), new production (YN)
+- **Bellman Equation**: Backward induction with value function interpolation
+- **Envelope Conditions**: Analytical derivatives for first-order conditions
+- **Energy Cost Function**: Surrogate models approximating energy system optimization
 
 ## Current Status
 
@@ -181,8 +195,15 @@ julia_model/
 │   ├── test_benders_cuts.jl         # GBD implementation tests
 │   ├── test_numerical_stability.jl  # Stability analysis
 │   └── test_integration.jl          # Full algorithm tests
+├── dp/                              # Dynamic programming implementation
+│   ├── dp_macro_model.jl            # DP MACRO model with vintage capital
+│   ├── energy_cost_surrogate.jl     # Energy cost surrogate models
+│   └── dp_utilities.jl              # DP utility functions
+├── run_dp_macro.jl                  # DP MACRO model runner
 ├── gbd_docs/                        # Mathematical documentation
 │   └── gbd_mathematical_verification.py # SymPy analysis
+├── dp_mathematical_formulation.tex  # DP mathematical formulation (LaTeX)
+├── dp_mathematical_formulation.md   # DP mathematical formulation (Markdown)
 └── Project.toml                     # Package configuration
 ```
 
@@ -204,8 +225,31 @@ julia_model/
 - **YAML Configuration**: Human-readable parameter files with documentation
 - **Structured Outputs**: Organized data files with timestamped results
 
+## Implementation Details
+
+### Dynamic Programming Model Structure
+- **DPMacroModel**: Struct containing state grids, parameters, value functions, and envelope derivatives
+- **BellmanProblem**: Container for model and energy cost function
+- **State Space**: Three-dimensional grid over capital, GDP, and production energy
+- **Value Function Storage**: Four-dimensional arrays V[K,Y,P,t] with envelope derivatives V_K, V_Y, V_P
+- **Policy Functions**: Storage for optimal controls (consumption, investment, new production)
+
+### Energy Cost Surrogate Models
+- **Simple Linear**: Basic linear approximation for testing
+- **Polynomial**: Higher-order polynomial fitting to energy system responses
+- **AR Process**: Autoregressive time series models (AR1, AR2) incorporating temporal dynamics
+- **Integration**: Surrogate models called within DP Bellman operator for energy cost evaluation
+
+### Numerical Methods
+- **Backward Induction**: Dynamic programming solution starting from terminal period
+- **First-Order Conditions**: Analytical FOCs using envelope theorem for optimization
+- **Interpolation**: Linear and cubic spline interpolation for value function approximation
+- **Finite Differences**: Gradient approximation for energy cost derivatives
+- **Newton Method**: FOC-based solver with grid search fallback
+
 ## Command Line Memories
 
 - `julia --project=@. filename.jl`: Run Julia script using the project's dependencies and environment
+- `julia --project=@. run_dp_macro.jl`: Run dynamic programming MACRO model
 - `julia --project=@. sensitivity/run_sensitivity.jl`: Run sensitivity analysis with default parameters
 - `julia --project=@. sensitivity/analyze_sensitivity.jl`: Analyze and visualize sensitivity results
