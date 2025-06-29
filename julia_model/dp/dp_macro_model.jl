@@ -5,9 +5,10 @@ using Parameters
 using Interpolations
 using LinearAlgebra
 using Optim
+using Statistics
 
 # DP Model structure with vintage capital and 3-state formulation
-@with_kw struct DPMacroModel
+@with_kw mutable struct DPMacroModel
   # Time parameters
   years::Vector{Int} = [2020, 2030, 2040, 2050, 2060, 2070, 2080]
   T::Int = length(years)
@@ -45,6 +46,11 @@ using Optim
   K_grid::StepRangeLen{Float64} = range(K_min, K_max, length=n_K)
   Y_grid::StepRangeLen{Float64} = range(Y_min, Y_max, length=n_Y)
   PRODENE_grid::StepRangeLen{Float64} = range(0.5 * PRODENE_scale, 2.0 * PRODENE_scale, length=n_PRODENE)
+  
+  # Vector versions for adaptive grid calculations
+  grid_K_vec::Vector{Float64} = collect(K_grid)
+  grid_Y_vec::Vector{Float64} = collect(Y_grid)
+  grid_PRODENE_vec::Vector{Float64} = collect(PRODENE_grid)
 
   # Labor and AEEI trajectories (from macro_data_load.jl)
   labor::Dict{Int,Float64} = Dict()
@@ -727,35 +733,20 @@ function simulate_trajectory(model::DPMacroModel, K0::Float64, Y0::Float64, PROD
     Y_path[t] = Y * (1 - model.depr)^model.duration + YN_path[t]
     PRODENE_path[t] = PRODENE * (1 - model.depr)^model.duration + NEWENE_path[t]
     
-    # DEBUG: Check for vintage constraint violations
+    # DEBUG: Check for vintage constraint violations (reduced output)
     year = model.years[t]
     prev_year = model.years[t-1]
     
-    println("=== CAPITAL VINTAGE DEBUG ($(prev_year) → $(year)) ===")
-    println("  Previous K: $(round(K, digits=1))")
-    println("  Investment: $(round(I_path[t], digits=1))")
-    println("  New Capital (KN): $(round(KN_path[t], digits=1))")
-    println("  Depreciation rate (10yr): $(round(model.depr, digits=3))")
-    println("  Actual depreciation factor: $(round((1 - model.depr)^model.duration, digits=3))")
-    println("  K after depreciation: $(round(K_depreciated, digits=1))")
-    println("  Expected K: $(round(K_expected, digits=1))")
-    println("  Actual K: $(round(K_path[t], digits=1))")
-    println("  Difference: $(round(K_path[t] - K_expected, digits=3))")
-    
     # Check consistency
     investment_over_period = I_path[t] * model.duration
-    println("  Investment × duration: $(round(investment_over_period, digits=1))")
-    println("  KN vs I×duration: $(round(KN_path[t] - investment_over_period, digits=3))")
     
     if abs(KN_path[t] - investment_over_period) > 1e-3
-      println("  ⚠️  VIOLATION: KN ≠ I × duration")
+      println("  ⚠️  VIOLATION at $(year): KN ≠ I × duration ($(round(KN_path[t] - investment_over_period, digits=3)))")
     end
     
     if abs(K_path[t] - K_expected) > 1e-3
-      println("  ⚠️  VIOLATION: Capital transition inconsistent")
+      println("  ⚠️  VIOLATION at $(year): Capital transition inconsistent ($(round(K_path[t] - K_expected, digits=3)))")
     end
-    
-    println()
 
     # Calculate physical energy (using same split as base year for simplicity)
     year = model.years[t]

@@ -6,6 +6,7 @@ include("macro/macro_data_load.jl")  # Use standard MACRO parameter loading
 include("dp/dp_macro_model.jl")
 include("dp/energy_cost_surrogate.jl")
 include("dp/dp_utilities.jl")
+include("dp/adaptive_grid.jl")  # Include adaptive grid functionality
 
 using Printf
 using Plots
@@ -16,7 +17,8 @@ function run_dp_macro(;
   use_surrogate::Bool=false,   # Use Python surrogate (vs simple approximation)
   n_grid::Int=100,             # Grid size
   plot_results::Bool=true,
-  use_linear_interpolation::Bool=true  # Use linear interpolation (vs cubic spline)
+  use_linear_interpolation::Bool=true,  # Use linear interpolation (vs cubic spline)
+  use_adaptive_grid::Bool=true # Use adaptive grid refinement
 )
 
   println("="^60)
@@ -89,12 +91,9 @@ function run_dp_macro(;
     use_linear_interpolation=use_linear_interpolation
   )
 
-  # Create Bellman problem
-  bp = BellmanProblem(model, energy_cost_func)
-
-  # Solve using backward induction
-  println("\nSolving model using backward induction...")
-  solve_dp!(bp)
+  # Use adaptive grid refinement instead of fixed grid
+  println("\nUsing adaptive grid refinement...")
+  model, curvature_map = adaptive_grid_refinement(model, energy_cost_func, 3)
 
   # Simulate trajectory
   println("\nSimulating optimal trajectory...")
