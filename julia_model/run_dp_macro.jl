@@ -15,7 +15,8 @@ function run_dp_macro(;
   use_egm::Bool=true,          # Use endogenous grid method
   use_surrogate::Bool=false,   # Use Python surrogate (vs simple approximation)
   n_grid::Int=100,             # Grid size
-  plot_results::Bool=true
+  plot_results::Bool=true,
+  use_linear_interpolation::Bool=true  # Use linear interpolation (vs cubic spline)
 )
 
   println("="^60)
@@ -84,7 +85,8 @@ function run_dp_macro(;
     y0=params.gdp_base,
     k0=params.k0,
     c0=params.c0,
-    i0=params.i0
+    i0=params.i0,
+    use_linear_interpolation=use_linear_interpolation
   )
 
   # Create Bellman problem
@@ -153,5 +155,5 @@ return trajectory, results_df
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-  trajectory, results = run_dp_macro(use_egm=true, use_surrogate=false, n_grid=20)
+  trajectory, results = run_dp_macro(use_egm=true, use_surrogate=false, n_grid=20, use_linear_interpolation=true)
 end
