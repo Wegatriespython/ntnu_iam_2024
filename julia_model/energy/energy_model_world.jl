@@ -8,7 +8,7 @@ using YAML
 # Get the directory of the current file
 const ENERGY_MODEL_DIR = dirname(@__FILE__)
 const JULIA_MODEL_DIR = dirname(ENERGY_MODEL_DIR)
-const PARAMS_FILE = joinpath(JULIA_MODEL_DIR, "energy_parameters.yaml")
+const PARAMS_FILE = joinpath(JULIA_MODEL_DIR, "energy_parameters_scaled.yaml")
 
 # Load parameters from YAML
 println("Loading parameters from: $PARAMS_FILE")
@@ -66,14 +66,14 @@ for (tech, outputs) in params["output"]
     end
 end
 
-# CO2 emission coefficients [tCO2/MWh]
+# CO2 emission coefficients [ktCO2/GWh]
 CO2_emission = params["CO2_emission"]
 # Maximum annual technology capacity growth rate
 diffusion_up = params["diffusion_up"]
 # Maximum technology capacity constant addition per period
 startup = params["startup"]
 
-# Demand in base year [PWh]
+# Demand in base year [GWh]
 demand = Dict()
 for (energy_type, levels) in params["demand"]
     for (lvl, val) in levels
@@ -94,7 +94,7 @@ beta = params["model"]["beta"]
 share_up = params["share_up"]
 share_lo = params["share_lo"]
 
-# Investment cost [$/kW]
+# Investment cost [M$/MW]
 inv_cost = Dict()
 if haskey(params, "inv")
     for (tech, yrs) in params["inv"]
@@ -104,7 +104,7 @@ if haskey(params, "inv")
     end
 end
 
-# Fixed O&M cost [$/(kW/yr)]
+# Fixed O&M cost [M$/(MW*yr)]
 fom = Dict()
 if haskey(params, "fom")
     for (tech, yrs) in params["fom"]
@@ -114,7 +114,7 @@ if haskey(params, "fom")
     end
 end
 
-# Variable cost [$/MWh]
+# Variable cost [M$/GWh]
 vom = Dict()
 # init zeros
 for tech in technology, yr in year_all
@@ -149,7 +149,7 @@ function calculate_costs()
     valid_techs = [t for t in technology if haskey(lifetime,t) && lifetime[t]>0 && haskey(hours,t) && hours[t]>0]
     for tech in valid_techs, yr in year_all
         if haskey(inv_cost,(tech,yr)) && haskey(fom,(tech,yr))
-            cost_capacity[(tech,yr)] = (inv_cost[(tech,yr)]*annuity_factors[tech] + fom[(tech,yr)])*1000
+            cost_capacity[(tech,yr)] = (inv_cost[(tech,yr)]*annuity_factors[tech] + fom[(tech,yr)])
         end
         if haskey(vom,(tech,yr))
             cost_activity[(tech,yr)] = vom[(tech,yr)]
@@ -256,20 +256,20 @@ function create_energy_model!(model)
     # Historical calibration - only apply if not in integrated mode
     # (integrated mode applies these constraints separately)
     if !haskey(object_dictionary(model), :PHYSENE)
-        fix(ACT["coal_ppl",2020],9.462;force=true)
-        fix(ACT["oil_ppl",2020],0.7;force=true)
-        fix(ACT["solar_PV_ppl",2020],0.839;force=true)
-        fix(ACT["gas_ppl",2020],6.36;force=true)
-        fix(ACT["nuclear_ppl",2020],2.68;force=true)
-        fix(ACT["hydro_ppl",2020],4.36;force=true)
-        fix(ACT["wind_ppl",2020],1.6;force=true)
-        fix(ACT["bio_ppl",2020],0.69;force=true)
-        set_lower_bound(ACT["other_ppl",2020],0.127)
-        fix(ACT["coal_nele",2020],10.7;force=true)
-        fix(ACT["oil_nele",2020],43.0;force=true)
-        fix(ACT["gas_nele",2020],18.7;force=true)
-        fix(ACT["bio_nele",2020],10.6;force=true)
-        set_lower_bound(ACT["other_nele",2020],0.28)
+        # Use scaled calibration values from energy_calibration parameter
+        for (tech_yr, val) in energy_calibration
+            tech, yr = tech_yr
+            if yr == 2020
+                fix(ACT[tech, yr], val; force=true)
+            end
+        end
+        # Use scaled lower bound calibration values
+        for (tech_yr, val) in energy_calibration_lo
+            tech, yr = tech_yr
+            if yr == 2020
+                set_lower_bound(ACT[tech, yr], val)
+            end
+        end
     end
 
     # Objective
