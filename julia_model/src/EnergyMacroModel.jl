@@ -9,10 +9,10 @@ include("../model_config.jl")
 
 # Include all model components in the module scope (only once)
 include("../shared.jl")
-include("../energy_model_world.jl")
-include("../macro_data_load.jl")
-include("../macro_core.jl")
-include("../macro_presolve.jl")
+include("../energy/energy_model_world.jl")
+include("../macro/macro_data_load.jl")
+include("../macro/macro_core.jl")
+include("../macro/macro_presolve.jl")
 
 
 # Define the solve function with configurable parameters

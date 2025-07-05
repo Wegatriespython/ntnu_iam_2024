@@ -26,7 +26,7 @@ struct BasisStability
     nonbasic_indices::Vector{Int}
     
     # Basic solution and matrix inverse (both m×m)
-    x_B::Vector{Float64}        # Basic solution: x*_B = A_B^(-1) * D^0
+x_B::Vector{Float64}        # Basic solution: x*_B = A_B^(-1) * D^0
     M::Matrix{Float64}          # Basic matrix inverse: M = A_B^(-1)
     
     # Original RHS vector D^0 (m×1)
@@ -71,13 +71,7 @@ function extract_basis_info(model::Model)
     
     # Ensure we have exactly m basic variables
     if length(basic_vars) != m
-        println("   Warning: Found $(length(basic_vars)) basic variables, expected $m")
-        # Adjust by taking first m basic variables
-        basic_vars = basic_vars[1:min(m, length(basic_vars))]
-        # If still not enough, add some non-basic variables
-        while length(basic_vars) < m && !isempty(nonbasic_vars)
-            push!(basic_vars, pop!(nonbasic_vars))
-        end
+        error("Number of basic variables ($(length(basic_vars))) extracted from MOI.BASIC does not match number of structural constraints ($m). This indicates a potential issue with the solver's basis reporting or a degenerate problem. Basis stability analysis requires a square, invertible basic matrix.")
     end
     
     # Build basic indices
@@ -412,7 +406,7 @@ end
 Print a comprehensive summary of the basis stability analysis.
 """
 function print_stability_summary(basis::BasisStability)
-    println("\\n=== BASIS STABILITY ANALYSIS ===")
+    println("\n=== BASIS STABILITY ANALYSIS ===")
     println("Model dimensions:")
     println("  Variables (n): $(basis.n)")
     println("  Constraints (m): $(basis.m)")
@@ -421,13 +415,13 @@ function print_stability_summary(basis::BasisStability)
     
     # Check matrix properties
     cond_M = cond(basis.M)
-    println("\\nMatrix properties:")
+    println("\nMatrix properties:")
     println("  Basic matrix inverse condition number: ", @sprintf("%.2e", cond_M))
     println("  Basic solution norm: ", @sprintf("%.4f", norm(basis.x_B)))
     
     # Print sample of independent bounds
     bounds = compute_independent_bounds(basis)
-    println("\\nIndependent RHS perturbation bounds (first 10):")
+    println("\nIndependent RHS perturbation bounds (first 10):")
     for j in 1:min(10, length(bounds))
         lb_str = isfinite(bounds[j][1]) ? @sprintf("%.4f", bounds[j][1]) : "-∞"
         ub_str = isfinite(bounds[j][2]) ? @sprintf("%.4f", bounds[j][2]) : "+∞"
@@ -440,5 +434,5 @@ function print_stability_summary(basis::BasisStability)
     # Run sensitivity analysis
     sensitivity = analyze_perturbation_sensitivity(basis; n_samples=500)
     
-    println("\\n=== END STABILITY ANALYSIS ===\\n")
+    println("\n=== END STABILITY ANALYSIS ===\n")
 end

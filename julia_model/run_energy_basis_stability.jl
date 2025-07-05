@@ -107,7 +107,7 @@ function compare_perturbation_approaches(basis::BasisStability)
     δD = zeros(Float64, basis.m)
     for j in 1:basis.m
       if isfinite(bounds[j][1]) && isfinite(bounds[j][2])
-        # 50% of bound range
+        # Sample uniformly within 50% of the independent bound range
         range_size = 0.5 * (bounds[j][2] - bounds[j][1])
         center = 0.5 * (bounds[j][1] + bounds[j][2])
         δD[j] = center + range_size * (2 * rand() - 1)
