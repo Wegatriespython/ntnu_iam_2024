@@ -234,14 +234,93 @@ function main()
   optimize!(model)
 
   # 5. Report and Save Results
-  println("\n--- Results ---")
   status = termination_status(model)
-  println("Termination status: $status")
+  println("\nSolution status: $status")
 
   if status in (MOI.OPTIMAL, MOI.LOCALLY_SOLVED)
-    println("✅ Optimal solution found")
-    total_cost = value(model[:TOTAL_COST])
-    @printf "Total system cost: %.2f billion USD\n" total_cost
+    # Extract results
+    years = year_all
+    
+    # Activity levels by technology
+    println("\n=== Activity Levels (GWh) ===")
+    activity_df = DataFrame(Year = years)
+    for tech in technology
+      activities = Float64[]
+      for y in years
+        val = value(model[:ACT][tech, y])
+        push!(activities, val)
+      end
+      if any(activities .> 1e-6)  # Only show technologies with non-zero activity
+        activity_df[!, Symbol(tech)] = activities
+      end
+    end
+    println(activity_df)
+    
+    # Capacity additions by technology
+    println("\n=== New Capacity Additions (MW) ===")
+    capacity_df = DataFrame(Year = years)
+    for tech in technology
+      capacities = Float64[]
+      for y in years
+        val = value(model[:CAP_NEW][tech, y])
+        push!(capacities, val)
+      end
+      if any(capacities .> 1e-6)  # Only show technologies with non-zero capacity
+        capacity_df[!, Symbol(tech)] = capacities
+      end
+    end
+    println(capacity_df)
+    
+    # Cost analysis
+    println("\n=== Cost Analysis ===")
+    annual_costs = [value(model[:COST_ANNUAL][y]) for y in years]
+    cost_df = DataFrame(
+      Year = years,
+      Annual_Cost_MUSD = annual_costs,
+      Discounted_Cost = [annual_costs[i] * 10 * (1.05)^(-10*(i-1)) for i in 1:length(years)]
+    )
+    println(cost_df)
+    println("\nTotal Discounted Cost: ", round(value(model[:TOTAL_COST]), digits=2), " Million USD")
+    
+    # Emissions analysis
+    println("\n=== Emissions Analysis ===")
+    emissions = [value(model[:EMISS][y]) for y in years]
+    emiss_df = DataFrame(
+      Year = years,
+      Annual_Emissions_ktCO2 = emissions,
+      Period_Emissions_MtCO2 = emissions * 10 / 1000  # Convert to Mt
+    )
+    println(emiss_df)
+    println("\nCumulative Emissions: ", round(value(model[:CUM_EMISS]) / 1000, digits=2), " MtCO2")
+    
+    # Technology shares for electricity generation
+    println("\n=== Electricity Generation Shares (%) ===")
+    shares_df = DataFrame(Year = years)
+    elec_techs = [t for t in technology if haskey(output, (t, "electricity", "secondary")) && get(output, (t, "electricity", "secondary"), 0) > 0]
+    
+    for tech in elec_techs
+      tech_shares = Float64[]
+      for y in years
+        total_elec = sum(value(model[:ACT][t, y]) * get(output, (t, "electricity", "secondary"), 0.0) for t in elec_techs)
+        
+        if total_elec > 0
+          share = value(model[:ACT][tech, y]) * get(output, (tech, "electricity", "secondary"), 0.0) / total_elec * 100
+        else
+          share = 0.0
+        end
+        push!(tech_shares, share)
+      end
+      if any(tech_shares .> 0.1)  # Only show technologies with > 0.1% share
+        shares_df[!, Symbol(tech)] = tech_shares
+      end
+    end
+    println(shares_df)
+    
+    # Model statistics
+    println("\n=== Model Statistics ===")
+    println("Number of variables: ", num_variables(model))
+    println("Number of constraints: ", num_constraints(model; count_variable_in_set_constraints=false))
+    println("Solve time: ", round(solve_time(model), digits=3), " seconds")
 
     if !isempty(output_filename)
       println("\n[ Info: Extracting results for saving...")
@@ -252,7 +331,10 @@ function main()
       println("\n[ Info: Skipping result saving (no --output specified).")
     end
   else
-    println("❌ Model solve failed.")
+    println("Model did not solve successfully!")
+    println("Termination status: ", status)
+    println("Primal status: ", primal_status(model))
+    println("Dual status: ", dual_status(model))
   end
 
   println("\n--- Energy Model Completed ---")
