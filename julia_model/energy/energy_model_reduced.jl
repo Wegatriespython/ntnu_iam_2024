@@ -5,6 +5,27 @@ using JuMP
 using YAML
 using Statistics
 
+# --- Bias Configuration ---
+# Set BIAS_FACTOR to 0.0 for a pure mean aggregation.
+# Set BIAS_FACTOR to 1.0 to use only the winner technology's parameters.
+# Values in between will create a weighted average.
+const BIAS_FACTOR = 1.0  # <-- TOGGLE THIS VALUE (0.0 to 1.0)
+
+# Define the worst-performing technology for each group based on the world model's results
+# These are technologies with zero or minimal usage in the full model optimization
+const REPRESENTATIVE_TECHS = Dict(
+    "fossil_power" => "oil_ppl",           # Drops to 0 after 2020
+    "renewable_power" => "wind_ppl",       # Drops to 0 after 2030
+    "fossil_extraction" => "oil_extr",     # Drops to 0 after 2020
+    "renewable_potential" => "wind_pot",   # Drops to 0 after 2030
+    "fossil_nonelec" => "oil_nele",        # Drops to 0 after 2020
+    "biomass_nonelec" => "bio_nele",       # Only one tech in group
+    "other_nonelec" => "other_nele",       # Stays at very low levels
+    "biomass_power" => "bio_ppl",          # Drops to 0 after 2020
+    # Groups with one tech are included for completeness
+)
+
+
 # Load parameters from shared configuration
 const ENERGY_MODEL_DIR = dirname(@__FILE__)
 const JULIA_MODEL_DIR = dirname(ENERGY_MODEL_DIR)
@@ -53,11 +74,17 @@ for (group, techs) in TECH_GROUPS
 end
 
 # Function to aggregate parameter values across technologies in a group
-function aggregate_parameter(param_dict, group_techs, aggregation_method=:mean)
+function aggregate_parameter(param_dict, group_techs, aggregation_method=:mean; winner_tech=nothing, bias=0.0)
     values = []
+    winner_value = nothing
+
     for tech in group_techs
         if haskey(param_dict, tech)
-            push!(values, param_dict[tech])
+            val = param_dict[tech]
+            push!(values, val)
+            if tech == winner_tech
+                winner_value = val
+            end
         end
     end
     
@@ -65,21 +92,29 @@ function aggregate_parameter(param_dict, group_techs, aggregation_method=:mean)
         return 0.0
     end
     
+    mean_value = 0.0
     if aggregation_method == :mean
-        return mean(values)
+        mean_value = mean(values)
     elseif aggregation_method == :sum
-        return sum(values)
+        mean_value = sum(values)
     elseif aggregation_method == :max
-        return maximum(values)
+        mean_value = maximum(values)
     else
-        return mean(values)
+        mean_value = mean(values)
+    end
+
+    if winner_tech !== nothing && winner_value !== nothing
+        return (1 - bias) * mean_value + bias * winner_value
+    else
+        return mean_value
     end
 end
 
 # Function to aggregate nested parameters (like input/output coefficients)
-function aggregate_nested_parameter(param_dict, group_techs, aggregation_method=:mean)
+function aggregate_nested_parameter(param_dict, group_techs, aggregation_method=:mean; winner_tech=nothing, bias=0.0)
     result = Dict()
     
+    # First, gather all values, grouped by their energy/level key
     for tech in group_techs
         if haskey(param_dict, tech)
             tech_params = param_dict[tech]
@@ -91,7 +126,8 @@ function aggregate_nested_parameter(param_dict, group_techs, aggregation_method=
                             if !haskey(result, key)
                                 result[key] = []
                             end
-                            push!(result[key], value)
+                            # Store the technology name with its value
+                            push!(result[key], (tech, value))
                         end
                     end
                 end
@@ -99,15 +135,27 @@ function aggregate_nested_parameter(param_dict, group_techs, aggregation_method=
         end
     end
     
-    # Aggregate collected values
+    # Now, aggregate the collected values
     aggregated = Dict()
-    for (key, values) in result
-        if aggregation_method == :mean
-            aggregated[key] = mean(values)
-        elseif aggregation_method == :sum
-            aggregated[key] = sum(values)
+    for (key, tech_values) in result
+        # Extract just the numerical values for calculating the mean
+        values = [v for (t, v) in tech_values]
+        mean_value = isempty(values) ? 0.0 : mean(values)
+
+        # Find the specific value for the winner technology
+        winner_value = nothing
+        for (tech, value) in tech_values
+            if tech == winner_tech
+                winner_value = value
+                break
+            end
+        end
+
+        # If a winner is specified and found, apply the bias. Otherwise, use the mean.
+        if winner_tech !== nothing && winner_value !== nothing
+            aggregated[key] = (1 - bias) * mean_value + bias * winner_value
         else
-            aggregated[key] = mean(values)
+            aggregated[key] = mean_value
         end
     end
     
@@ -126,64 +174,32 @@ function compute_group_parameters(params)
 
     for (group, techs) in TECH_GROUPS
         group_params[group] = Dict()
+        winner = get(REPRESENTATIVE_TECHS, group, nothing)
         
         # Aggregate diffusion rates
-        diffusion_rates = []
-        for tech in techs
-            if haskey(diffusion_up, tech)
-                push!(diffusion_rates, diffusion_up[tech])
-            end
-        end
-        group_params[group]["diffusion"] = isempty(diffusion_rates) ? 0.1 : mean(diffusion_rates)
+        group_params[group]["diffusion"] = aggregate_parameter(diffusion_up, techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate startup capacities
-        startup_caps = []
-        for tech in techs
-            if haskey(startup, tech)
-                push!(startup_caps, startup[tech])
-            end
-        end
-        group_params[group]["startup"] = isempty(startup_caps) ? 0.0 : sum(startup_caps)
+        group_params[group]["startup"] = aggregate_parameter(startup, techs, :sum, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate input coefficients
-        if haskey(params, "input")
-            group_params[group]["input_coeffs"] = aggregate_nested_parameter(params["input"], techs, :mean)
-        else
-            group_params[group]["input_coeffs"] = Dict()
-        end
+        group_params[group]["input_coeffs"] = aggregate_nested_parameter(get(params, "input", Dict()), techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate output coefficients
-        if haskey(params, "output")
-            group_params[group]["output_coeffs"] = aggregate_nested_parameter(params["output"], techs, :mean)
-        else
-            group_params[group]["output_coeffs"] = Dict()
-        end
+        group_params[group]["output_coeffs"] = aggregate_nested_parameter(get(params, "output", Dict()), techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate costs
-        if haskey(params, "vom")
-            group_params[group]["vom_cost"] = aggregate_parameter(params["vom"], techs, :mean)
-        else
-            group_params[group]["vom_cost"] = 50.0  # Default cost
-        end
+        group_params[group]["vom_cost"] = aggregate_parameter(get(params, "vom", Dict()), techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate capacity factors from hours
-        if haskey(params, "hours")
-            avg_hours = aggregate_parameter(params["hours"], techs, :mean)
-            # Hours are in thousands, so multiply by 1000 before dividing by 8760
-            group_params[group]["capacity_factor"] = (avg_hours * 1000.0) / 8760.0
-        else
-            group_params[group]["capacity_factor"] = 0.8  # Default
-        end
+        avg_hours = aggregate_parameter(get(params, "hours", Dict()), techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
+        group_params[group]["capacity_factor"] = (avg_hours * 1000.0) / 8760.0
         
         # Aggregate emissions
-        if haskey(params, "CO2_emission")
-            group_params[group]["emissions"] = aggregate_parameter(params["CO2_emission"], techs, :mean)
-        else
-            group_params[group]["emissions"] = 0.0
-        end
+        group_params[group]["emissions"] = aggregate_parameter(get(params, "CO2_emission", Dict()), techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         
         # Aggregate lifetime
-        lifetime_val = aggregate_parameter(params["lifetime"], techs, :mean)
+        lifetime_val = aggregate_parameter(params["lifetime"], techs, :mean, winner_tech=winner, bias=BIAS_FACTOR)
         group_params[group]["lifetime"] = lifetime_val > 0 ? lifetime_val : 30.0
 
         # Aggregate investment and FOM costs and calculate cost_capacity
@@ -197,34 +213,45 @@ function compute_group_parameters(params)
         for y in year_all
             inv_costs = []
             fom_costs = []
+            winner_inv_cost = nothing
+            winner_fom_cost = nothing
+
             for tech in techs
                 if haskey(params, "inv") && haskey(params["inv"], tech) && haskey(params["inv"][tech], string(y))
-                    push!(inv_costs, params["inv"][tech][string(y)])
+                    val = params["inv"][tech][string(y)]
+                    push!(inv_costs, val)
+                    if tech == winner
+                        winner_inv_cost = val
+                    end
                 end
                 if haskey(params, "fom") && haskey(params["fom"], tech) && haskey(params["fom"][tech], string(y))
-                    push!(fom_costs, params["fom"][tech][string(y)])
+                    val = params["fom"][tech][string(y)]
+                    push!(fom_costs, val)
+                    if tech == winner
+                        winner_fom_cost = val
+                    end
                 end
             end
             avg_inv_cost = isempty(inv_costs) ? 0.0 : mean(inv_costs)
             avg_fom_cost = isempty(fom_costs) ? 0.0 : mean(fom_costs)
-            group_params[group]["cost_capacity"][y] = avg_inv_cost * annuity_factor + avg_fom_cost
+
+            final_inv_cost = (winner !== nothing && winner_inv_cost !== nothing) ? (1 - BIAS_FACTOR) * avg_inv_cost + BIAS_FACTOR * winner_inv_cost : avg_inv_cost
+            final_fom_cost = (winner !== nothing && winner_fom_cost !== nothing) ? (1 - BIAS_FACTOR) * avg_fom_cost + BIAS_FACTOR * winner_fom_cost : avg_fom_cost
+
+            group_params[group]["cost_capacity"][y] = final_inv_cost * annuity_factor + final_fom_cost
         end
 
         # Aggregate base year calibration
-        if haskey(params, "energy_calibration")
-            base_activities = []
-            for tech in techs
-                if haskey(params["energy_calibration"], tech)
-                    tech_years = params["energy_calibration"][tech]
-                    if haskey(tech_years, "2020")
-                        push!(base_activities, tech_years["2020"])
-                    end
+        base_activities = []
+        for tech in techs
+            if haskey(params, "energy_calibration") && haskey(params["energy_calibration"], tech)
+                tech_years = params["energy_calibration"][tech]
+                if haskey(tech_years, "2020")
+                    push!(base_activities, tech_years["2020"])
                 end
             end
-            group_params[group]["base_activity"] = isempty(base_activities) ? 0.0 : sum(base_activities)
-        else
-            group_params[group]["base_activity"] = 0.0
         end
+        group_params[group]["base_activity"] = isempty(base_activities) ? 0.0 : sum(base_activities)
     end
     
     return group_params
