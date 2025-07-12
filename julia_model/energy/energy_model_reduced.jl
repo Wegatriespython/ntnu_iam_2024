@@ -9,7 +9,7 @@ using Statistics
 # Set BIAS_FACTOR to 0.0 for a pure mean aggregation.
 # Set BIAS_FACTOR to 1.0 to use only the winner technology's parameters.
 # Values in between will create a weighted average.
-const BIAS_FACTOR = 1.0  # <-- TOGGLE THIS VALUE (0.0 to 1.0)
+const BIAS_FACTOR = 0.0  # <-- TOGGLE THIS VALUE (0.0 to 1.0)
 
 # Define the worst-performing technology for each group based on the world model's results
 # These are technologies with zero or minimal usage in the full model optimization
@@ -171,6 +171,10 @@ function compute_group_parameters(params)
     group_params = Dict()
     year_all = [2020, 2030, 2040, 2050, 2060, 2070, 2080]
     discount_rate = get(params["model"], "discount_rate", 0.05)
+    
+    # Load parameters from params
+    diffusion_up = get(params, "diffusion_up", Dict())
+    startup = get(params, "startup", Dict())
 
     for (group, techs) in TECH_GROUPS
         group_params[group] = Dict()
@@ -261,7 +265,17 @@ end
 group_params = compute_group_parameters(params)
 
 # Model construction for reduced form
-function create_reduced_energy_model!(model)
+function create_reduced_energy_model!(model; config_file=nothing)
+    # Load parameters and compute group params based on config file
+    if config_file !== nothing
+        params = YAML.load_file(config_file)
+        group_params = compute_group_parameters(params)
+    else
+        # Use the module-level params and group_params if no config file provided
+        params = Main.params
+        group_params = Main.group_params
+    end
+    
     # Get shared parameters if available
     year_all = get(model.ext, :year_all, [2020, 2030, 2040, 2050, 2060, 2070, 2080])
     period_length = get(model.ext, :period_length, 10)
