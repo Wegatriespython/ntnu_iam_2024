@@ -5,11 +5,29 @@ using HiGHS
 using DataFrames
 using CSV
 using JSON
+using ArgParse
 
 # Include the reduced energy model
 include("energy/energy_model_reduced.jl")
 
-function run_reduced_energy_model()
+function parse_commandline_args()
+  s = ArgParseSettings(
+    description="Run the reduced form energy model.",
+    prog="run_energy_reduced.jl"
+  )
+  @add_arg_table! s begin
+    "--qp"
+    help = "Enable QP mode with quadratic penalty on activity levels"
+    action = :store_true
+    "--qp-penalty"
+    help = "Quadratic penalty coefficient (default: 1e-6)"
+    arg_type = Float64
+    default = 1e-6
+  end
+  return parse_args(s)
+end
+
+function run_reduced_energy_model(; use_qp=false, qp_penalty=1e-6)
   println("=== Running Reduced Form Energy Model ===")
 
   # Create model
@@ -21,6 +39,14 @@ function run_reduced_energy_model()
   model.ext[:year_all] = [2020, 2030, 2040, 2050, 2060, 2070, 2080]
   model.ext[:period_length] = 10
   model.ext[:discount_rate] = 0.05
+  
+  # Configure QP mode
+  model.ext[:use_qp] = use_qp
+  model.ext[:qp_penalty_coefficient] = qp_penalty
+  
+  if use_qp
+    println("QP mode enabled with penalty coefficient: $qp_penalty")
+  end
 
   # Create the reduced energy model
   create_reduced_energy_model!(model)
@@ -126,5 +152,6 @@ end
 
 # Run the model
 if abspath(PROGRAM_FILE) == @__FILE__
-  model = run_reduced_energy_model()
+  args = parse_commandline_args()
+  model = run_reduced_energy_model(use_qp=args["qp"], qp_penalty=args["qp-penalty"])
 end

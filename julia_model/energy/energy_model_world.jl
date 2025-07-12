@@ -163,7 +163,12 @@ end
 cost_capacity, cost_activity, cost = calculate_costs()
 
 # Model construction
-function create_energy_model!(model)
+function create_energy_model!(model; config_file=nothing)
+    # Load parameters from config file if provided
+    if config_file !== nothing
+        global params = YAML.load_file(config_file)
+        global cost_capacity, cost_activity, cost = calculate_costs()
+    end
     @variable(model, ACT[technology, year_all] >= 0)
     @variable(model, CAP_NEW[technology, year_all] >= 0)
     @variable(model, EMISS[year_all])
@@ -275,7 +280,21 @@ function create_energy_model!(model)
     # Objective
     # Only set objective if not in integrated mode
     if !haskey(object_dictionary(model), :UTILITY)
-        @objective(model, Min, TOTAL_COST)
+        # Check if QP mode is enabled (default to false if not specified)
+        use_qp = get(model.ext, :use_qp, false)
+        
+        if use_qp
+            # Add small negative quadratic penalty to make it a convex QP
+            # The penalty is on activity levels to encourage smoother solutions
+            penalty_coefficient = get(model.ext, :qp_penalty_coefficient, 1e-6)  # Allow custom penalty coefficient
+            
+            @objective(model, Min, 
+                TOTAL_COST + penalty_coefficient * sum(ACT[t, y]^2 for t in technology, y in year_all)
+            )
+        else
+            # Standard LP formulation
+            @objective(model, Min, TOTAL_COST)
+        end
     end
 
     return model

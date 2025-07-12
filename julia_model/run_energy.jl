@@ -33,6 +33,13 @@ function parse_commandline_args()
     help = "Random seed for reproducible perturbations."
     arg_type = Int
     default = -1 # A value of -1 means no seed will be set
+    "--qp"
+    help = "Enable QP mode with quadratic penalty on activity levels"
+    action = :store_true
+    "--qp-penalty"
+    help = "Quadratic penalty coefficient (default: 1e-6)"
+    arg_type = Float64
+    default = 1e-6
   end
   return parse_args(s)
 end
@@ -68,21 +75,21 @@ Save the perturbed cost data to a CSV file for debugging purposes.
 """
 function save_perturbed_costs(cost_data::Vector{<:Dict}, filename::String)
   println("[ Info: Saving perturbed costs to '$filename'")
-  
+
   cost_names = ["inv_cost", "fom", "vom"]
   all_costs = DataFrame()
-  
+
   for (i, cost_dict) in enumerate(cost_data)
     for (tech, cost) in cost_dict
       temp_df = DataFrame(
-        cost_type = cost_names[i],
-        technology = tech,
-        cost = cost
+        cost_type=cost_names[i],
+        technology=tech,
+        cost=cost
       )
       append!(all_costs, temp_df)
     end
   end
-  
+
   CSV.write(filename, all_costs)
   println("[ Success: Perturbed costs saved ($(nrow(all_costs)) records)")
 end
@@ -99,16 +106,16 @@ function extract_results(model::Model)
   # Helper function to extract a 2D variable and append it to the main DataFrame
   function append_2d_variable!(df, var_name, unit)
     var = model[var_name]
-    
+
     # Get the axes
     techs = var.axes[1]
     years = var.axes[2]
-    
+
     # Create result vectors
     tech_vec = String[]
     year_vec = Int[]
     value_vec = Float64[]
-    
+
     # Extract non-zero values
     for tech in techs
       for year in years
@@ -120,7 +127,7 @@ function extract_results(model::Model)
         end
       end
     end
-    
+
     # Create temporary DataFrame
     temp_df = DataFrame(
       variable=string(var_name),
@@ -129,7 +136,7 @@ function extract_results(model::Model)
       value=value_vec,
       unit=unit
     )
-    
+
     # Append to main DataFrame
     append!(df, temp_df)
   end
@@ -145,16 +152,16 @@ function extract_results(model::Model)
   ]
     var = model[var_info.name]
     years = var.axes[1]
-    
+
     # Manual extraction for 1D arrays
     year_vec = Int[]
     value_vec = Float64[]
-    
+
     for year in years
       push!(year_vec, year)
       push!(value_vec, JuMP.value(var[year]))
     end
-    
+
     temp_df = DataFrame(
       variable=string(var_info.name),
       technology="ALL",
@@ -194,6 +201,8 @@ function main()
   perturb_percent = args["perturb"]
   output_filename = args["output"]
   seed = args["seed"]
+  use_qp = args["qp"]
+  qp_penalty = args["qp-penalty"]
 
   println("--- Starting Energy Model Run ---")
   if perturb_percent > 0
@@ -213,7 +222,7 @@ function main()
 
   # 3. Apply Perturbations (if requested)
   apply_perturbations!([inv_cost, fom, vom], perturb_percent)
-  
+
   # Save perturbed input costs if output file is specified
   if !isempty(output_filename) && perturb_percent > 0.0
     costs_filename = replace(output_filename, ".csv" => "_costs.csv")
@@ -226,7 +235,18 @@ function main()
   # 4. Create and Solve the JuMP Model
   println("\n[ Info: Building the optimization model...")
   model = Model(GAMS.Optimizer)
-  set_optimizer_attribute(model, "LP", "CPLEX")
+  
+  # Configure model extensions for QP mode
+  model.ext[:use_qp] = use_qp
+  model.ext[:qp_penalty_coefficient] = qp_penalty
+  
+  if use_qp
+    println("[ Info: QP mode enabled with penalty coefficient: $qp_penalty")
+    set_optimizer_attribute(model, "QCP", "CPLEX")  # Use QCP solver for quadratic problems
+  else
+    set_optimizer_attribute(model, "LP", "CPLEX")
+  end
+  
   Base.invokelatest(create_energy_model!, model)
 
   @printf "[ Info: Model has %d variables and %d constraints\n" num_variables(model) num_constraints(model; count_variable_in_set_constraints=false)
@@ -240,10 +260,10 @@ function main()
   if status in (MOI.OPTIMAL, MOI.LOCALLY_SOLVED)
     # Extract results
     years = year_all
-    
+
     # Activity levels by technology
     println("\n=== Activity Levels (GWh) ===")
-    activity_df = DataFrame(Year = years)
+    activity_df = DataFrame(Year=years)
     for tech in technology
       activities = Float64[]
       for y in years
@@ -255,10 +275,10 @@ function main()
       end
     end
     println(activity_df)
-    
+
     # Capacity additions by technology
     println("\n=== New Capacity Additions (MW) ===")
-    capacity_df = DataFrame(Year = years)
+    capacity_df = DataFrame(Year=years)
     for tech in technology
       capacities = Float64[]
       for y in years
@@ -270,39 +290,39 @@ function main()
       end
     end
     println(capacity_df)
-    
+
     # Cost analysis
     println("\n=== Cost Analysis ===")
     annual_costs = [value(model[:COST_ANNUAL][y]) for y in years]
     cost_df = DataFrame(
-      Year = years,
-      Annual_Cost_MUSD = annual_costs,
-      Discounted_Cost = [annual_costs[i] * 10 * (1.05)^(-10*(i-1)) for i in 1:length(years)]
+      Year=years,
+      Annual_Cost_MUSD=annual_costs,
+      Discounted_Cost=[annual_costs[i] * 10 * (1.05)^(-10 * (i - 1)) for i in 1:length(years)]
     )
     println(cost_df)
     println("\nTotal Discounted Cost: ", round(value(model[:TOTAL_COST]), digits=2), " Million USD")
-    
+
     # Emissions analysis
     println("\n=== Emissions Analysis ===")
     emissions = [value(model[:EMISS][y]) for y in years]
     emiss_df = DataFrame(
-      Year = years,
-      Annual_Emissions_ktCO2 = emissions,
-      Period_Emissions_MtCO2 = emissions * 10 / 1000  # Convert to Mt
+      Year=years,
+      Annual_Emissions_ktCO2=emissions,
+      Period_Emissions_MtCO2=emissions * 10 / 1000  # Convert to Mt
     )
     println(emiss_df)
     println("\nCumulative Emissions: ", round(value(model[:CUM_EMISS]) / 1000, digits=2), " MtCO2")
-    
+
     # Technology shares for electricity generation
     println("\n=== Electricity Generation Shares (%) ===")
-    shares_df = DataFrame(Year = years)
+    shares_df = DataFrame(Year=years)
     elec_techs = [t for t in technology if haskey(output, (t, "electricity", "secondary")) && get(output, (t, "electricity", "secondary"), 0) > 0]
-    
+
     for tech in elec_techs
       tech_shares = Float64[]
       for y in years
         total_elec = sum(value(model[:ACT][t, y]) * get(output, (t, "electricity", "secondary"), 0.0) for t in elec_techs)
-        
+
         if total_elec > 0
           share = value(model[:ACT][tech, y]) * get(output, (tech, "electricity", "secondary"), 0.0) / total_elec * 100
         else
@@ -315,7 +335,7 @@ function main()
       end
     end
     println(shares_df)
-    
+
     # Model statistics
     println("\n=== Model Statistics ===")
     println("Number of variables: ", num_variables(model))

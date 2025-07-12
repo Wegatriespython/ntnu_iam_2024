@@ -429,7 +429,21 @@ function create_reduced_energy_model!(model; config_file=nothing)
     
     # Set objective if standalone mode
     if !haskey(object_dictionary(model), :UTILITY)
-        @objective(model, Min, TOTAL_COST_R)
+        # Check if QP mode is enabled (default to false if not specified)
+        use_qp = get(model.ext, :use_qp, false)
+        
+        if use_qp
+            # Add small negative quadratic penalty to make it a convex QP
+            # The penalty is on activity levels to encourage smoother solutions
+            penalty_coefficient = get(model.ext, :qp_penalty_coefficient, 1e-6)  # Allow custom penalty coefficient
+            
+            @objective(model, Min, 
+                TOTAL_COST_R + penalty_coefficient * sum(ACT_R[g, y]^2 for g in groups, y in year_all)
+            )
+        else
+            # Standard LP formulation
+            @objective(model, Min, TOTAL_COST_R)
+        end
     end
     
     return model
