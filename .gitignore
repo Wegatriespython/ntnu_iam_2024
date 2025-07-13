@@ -8,3 +8,4 @@
 *.csv
 *.gdx
 *julia_model/sensitivity/data
+*julia_model/config_samples
